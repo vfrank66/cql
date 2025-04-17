@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: go_test
-on: [push, pull_request]
-jobs:
+name: CQL Testing and Analysis
+on: [push, pull_request, workflow_dispatch]
 
+jobs:
   go_test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-
     - name: Check out code
       uses: actions/checkout@v6
 
@@ -30,6 +29,7 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version-file: 'go.mod'
+        cache: true
       id: go
 
     - name: Get dependencies
@@ -44,12 +44,8 @@ jobs:
             go test ./...
 
   go_spec_test_coverage:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
+    runs-on: ubuntu-latest
     steps:
-
     - name: Check out code
       uses: actions/checkout@v6
 
@@ -57,15 +53,35 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version-file: 'go.mod'
-      id: go
+        cache: true
 
     - name: Get dependencies
-      run: |
-            go mod download
-    - name: Build
-      run: |
-            go build ./...
+      run: go mod download
 
-    - name: Spec Test Coverage
-      run: |
-            go run tests/spectests/cmd/analyzer/analyzer.go
+    - name: Build analyzer
+      run: go build -o analyzer tests/spectests/cmd/analyzer/analyzer.go
+
+    - name: Run analyzer
+      run: ./analyzer > analyzer-output.txt
+      
+    - name: Upload analyzer results
+      uses: actions/upload-artifact@v4
+      with:
+        name: analyzer-results
+        path: analyzer-output.txt
+        if-no-files-found: error
+        
+    - name: Comment PR with analyzer results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const analyzerOutput = fs.readFileSync('analyzer-output.txt', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '## CQL Test Analyzer Results\n\n```\n' + analyzerOutput + '\n```'
+          });
