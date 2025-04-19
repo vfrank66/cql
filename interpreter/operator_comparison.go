@@ -255,6 +255,43 @@ func roundToDecimalPlaces(num float64, places int) float64 {
 	return math.Round(num*factor) / factor
 }
 
+// ~(left Decimal, right Decimal) Boolean
+// https://cql.hl7.org/09-b-cqlreference.html#equivalent
+// For decimal equivalence, the specification states:
+// - Trailing zeros after the decimal are ignored
+// - Comparison is done on values rounded to the precision of the least precise operand
+func evalEquivalentDecimal(_ model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {
+	if result.IsNull(lObj) && result.IsNull(rObj) {
+		return result.New(true)
+	}
+	if result.IsNull(lObj) != result.IsNull(rObj) {
+		return result.New(false)
+	}
+
+	lDec, rDec, err := applyToValues(lObj, rObj, result.ToFloat64)
+	if err != nil {
+		return result.Value{}, err
+	}
+
+	// Handle equivalence according to the CQL specification:
+	// 1. Determine the precision of each decimal
+	lPrecision := getDecimalPrecision(lDec)
+	rPrecision := getDecimalPrecision(rDec)
+
+	// 2. Use the lesser precision
+	precision := lPrecision
+	if rPrecision < lPrecision {
+		precision = rPrecision
+	}
+
+	// 3. Round both numbers to that precision
+	lRounded := roundToDecimalPlaces(lDec, precision)
+	rRounded := roundToDecimalPlaces(rDec, precision)
+
+	// 4. Compare the rounded values
+	return result.New(lRounded == rRounded)
+}
+
 // ~(left String, right String) Boolean
 // https://cql.hl7.org/09-b-cqlreference.html#equivalent
 func evalEquivalentString(_ model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {

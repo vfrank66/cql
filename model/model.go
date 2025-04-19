@@ -1192,6 +1192,20 @@ type LastPositionOf struct{ *BinaryExpression }
 // StartsWith is https://cql.hl7.org/09-b-cqlreference.html#startswith
 type StartsWith struct{ *BinaryExpression }
 
+// HighBoundary ELM expression from https://cql.hl7.org/09-b-cqlreference.html#highboundary.
+type HighBoundary struct {
+	*BinaryExpression
+}
+
+var _ IBinaryExpression = &HighBoundary{}
+
+// LowBoundary ELM expression from https://cql.hl7.org/09-b-cqlreference.html#lowboundary.
+type LowBoundary struct {
+	*BinaryExpression
+}
+
+var _ IBinaryExpression = &LowBoundary{}
+
 // Upper is https://cql.hl7.org/09-b-cqlreference.html#Upper
 type Upper struct{ *UnaryExpression }
 
@@ -1696,3 +1710,9 @@ func (w *Width) GetName() string { return "Width" }
 
 // GetName returns the name of the system operator.
 func (d *Duration) GetName() string { return "Duration" }
+
+// GetName returns the name of the system operator.
+func (h *HighBoundary) GetName() string { return "HighBoundary" }
+
+// GetName returns the name of the system operator.
+func (l *LowBoundary) GetName() string { return "LowBoundary" }

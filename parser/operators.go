@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/google/cql/internal/convert"
 	"github.com/google/cql/model"
 	"github.com/google/cql/types"
-	"github.com/antlr4-go/antlr/v4"
 )
 
 // parseFunction uses the reference resolver to resolve the function, visits the operands, and sets
@@ -843,6 +843,99 @@ func (p *Parser) loadSystemOperators() error {
 			name:     "Precision",
 			operands: [][]types.IType{{types.Time}},
 			model:    precisionModel(),
+		},
+		{
+			name:     "Precision",
+			operands: [][]types.IType{{types.Decimal}},
+			model:    precisionModel(),
+		},
+		{
+			name:     "HighBoundary",
+			operands: [][]types.IType{{types.Decimal, types.Integer}},
+			model: func() model.IExpression {
+				return &model.HighBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.Decimal),
+					},
+				}
+			},
+		},
+		{
+			name:     "HighBoundary",
+			operands: [][]types.IType{{types.Date, types.Integer}},
+			model: func() model.IExpression {
+				return &model.HighBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.Date),
+					},
+				}
+			},
+		},
+		{
+			name:     "HighBoundary",
+			operands: [][]types.IType{{types.DateTime, types.Integer}},
+			model: func() model.IExpression {
+				return &model.HighBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.DateTime),
+					},
+				}
+			},
+		},
+		{
+			name:     "HighBoundary",
+			operands: [][]types.IType{{types.Time, types.Integer}},
+			model: func() model.IExpression {
+				return &model.HighBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.Time),
+					},
+				}
+			},
+		},
+		{
+			name:     "LowBoundary",
+			operands: [][]types.IType{{types.Decimal, types.Integer}},
+			model: func() model.IExpression {
+				return &model.LowBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.Decimal),
+					},
+				}
+			},
+		},
+		{
+			name:     "LowBoundary",
+			operands: [][]types.IType{{types.Date, types.Integer}},
+			model: func() model.IExpression {
+				return &model.LowBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.Date),
+					},
+				}
+			},
+		},
+		{
+			name:     "LowBoundary",
+			operands: [][]types.IType{{types.DateTime, types.Integer}},
+			model: func() model.IExpression {
+				return &model.LowBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.DateTime),
+					},
+				}
+			},
+		},
+		{
+			name:     "LowBoundary",
+			operands: [][]types.IType{{types.Time, types.Integer}},
+			model: func() model.IExpression {
+				return &model.LowBoundary{
+					BinaryExpression: &model.BinaryExpression{
+						Expression: model.ResultType(types.Time),
+					},
+				}
+			},
 		},
 		{
 			name:     "Subtract",
