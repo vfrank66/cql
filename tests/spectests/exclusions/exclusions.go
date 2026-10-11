@@ -310,11 +310,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				// TODO: b/342064453 - Ambiguous match.
 				"TestEqualNull",
 				"TestInNullBoundaries",
-				"TestIntersectNull",
-				"TestIntersectNull1",
-				"TestIntersectNull2",
-				"TestIntersectNull3",
-				"TestIntersectNull4",
 			},
 		},
 		"CqlListOperatorsTest.xml": {

@@ -472,6 +472,77 @@ func TestIntersectInterval(t *testing.T) {
 				StaticType:    &types.Interval{PointType: types.Time},
 			}),
 		},
+		{
+			name: "Integer interval with null open high bound",
+			cql:  "Interval[1, 10] intersect Interval[5, null)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(5)),
+				High:          newOrFatal(t, nil),
+				LowInclusive:  true,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval with null open high bound, operands swapped",
+			cql:  "Interval[5, null) intersect Interval[1, 10]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(5)),
+				High:          newOrFatal(t, nil),
+				LowInclusive:  true,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval with null open low bound",
+			cql:  "Interval(null, 5] intersect Interval[1, 10]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, nil),
+				High:          newOrFatal(t, int32(5)),
+				LowInclusive:  false,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name:       "Integer interval with null open high bound and no overlap",
+			cql:        "Interval[1, 3] intersect Interval[5, null)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name: "Decimal interval with null open high bound",
+			cql:  "Interval[1.0, 10.0] intersect Interval[5.0, null)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, 5.0),
+				High:          newOrFatal(t, nil),
+				LowInclusive:  true,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Decimal},
+			}),
+		},
+		{
+			name: "Quantity interval with null closed low bound",
+			cql:  "Interval[null, 5 'cm'] intersect Interval[1 'cm', 10 'cm']",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Quantity{Value: 1, Unit: "cm"}),
+				High:          newOrFatal(t, result.Quantity{Value: 5, Unit: "cm"}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Quantity},
+			}),
+		},
+		{
+			name: "Date interval with null open high bound",
+			cql:  "Interval[@2020-01-01, @2020-06-01] intersect Interval[@2020-03-01, null)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Date{Date: time.Date(2020, time.March, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				High:          newOrFatal(t, nil),
+				LowInclusive:  true,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Date},
+			}),
+		},
 	}
 
 	for _, tc := range tests {
@@ -505,6 +576,11 @@ func TestIntersectInterval_Error(t *testing.T) {
 		{
 			name:                "Quantity intervals with different units",
 			cql:                 "Interval[1'cm', 5'cm'] intersect Interval[3'm', 7'm']",
+			wantEvalErrContains: "intersect operator received Quantities with differing unit values",
+		},
+		{
+			name:                "Quantity intervals with different high bound units",
+			cql:                 "Interval[1 'cm', 5 'cm'] intersect Interval[3 'cm', 7 'm']",
 			wantEvalErrContains: "intersect operator received Quantities with differing unit values",
 		},
 	}

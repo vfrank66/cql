@@ -651,21 +651,6 @@ func (i *interpreter) evalIntersectInterval(m model.IBinaryExpression, lObj, rOb
 		return result.New(nil)
 	}
 
-	// Get start and end bounds for both intervals
-	lStart, lEnd, err := startAndEnd(lObj, &i.evaluationTimestamp)
-	if err != nil {
-		return result.Value{}, err
-	}
-	rStart, rEnd, err := startAndEnd(rObj, &i.evaluationTimestamp)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	// If any bound is null, return null
-	if result.IsNull(lStart) || result.IsNull(lEnd) || result.IsNull(rStart) || result.IsNull(rEnd) {
-		return result.New(nil)
-	}
-
 	// This function only handles Date, DateTime, and Time intervals
 	return i.evalIntersectIntervalDateTime(m, lObj, rObj)
 }
@@ -824,6 +809,68 @@ func isEmptyFloat64Interval(low float64, lowIncl bool, high float64, highIncl bo
 	return low > high || (low == high && !(lowIncl && highIncl))
 }
 
+// unknownBounds records which bounds of an intersection are unknown because an operand has a null
+// open bound.
+type unknownBounds struct {
+	start, end bool
+}
+
+// fillUnknownBounds replaces an unknown start or end with the other interval's, so the known bounds
+// still decide whether the intervals overlap.
+func fillUnknownBounds(lStart, lEnd, rStart, rEnd *result.Value, pointType types.IType, evaluationTimestamp *time.Time) (unknownBounds, error) {
+	u := unknownBounds{
+		start: result.IsNull(*lStart) || result.IsNull(*rStart),
+		end:   result.IsNull(*lEnd) || result.IsNull(*rEnd),
+	}
+	var err error
+	switch {
+	case result.IsNull(*lStart) && result.IsNull(*rStart):
+		*lStart, err = minValue(pointType, evaluationTimestamp)
+		*rStart = *lStart
+	case result.IsNull(*lStart):
+		*lStart = *rStart
+	case result.IsNull(*rStart):
+		*rStart = *lStart
+	}
+	if err != nil {
+		return unknownBounds{}, err
+	}
+	switch {
+	case result.IsNull(*lEnd) && result.IsNull(*rEnd):
+		*lEnd, err = maxValue(pointType, evaluationTimestamp)
+		*rEnd = *lEnd
+	case result.IsNull(*lEnd):
+		*lEnd = *rEnd
+	case result.IsNull(*rEnd):
+		*rEnd = *lEnd
+	}
+	return u, err
+}
+
+// apply sets the unknown bounds of an intersection result back to null and open.
+func (u unknownBounds) apply(v result.Value, err error) (result.Value, error) {
+	if err != nil || result.IsNull(v) || (!u.start && !u.end) {
+		return v, err
+	}
+	interval, err := result.ToInterval(v)
+	if err != nil {
+		return result.Value{}, err
+	}
+	if u.start {
+		if interval.Low, err = result.New(nil); err != nil {
+			return result.Value{}, err
+		}
+		interval.LowInclusive = false
+	}
+	if u.end {
+		if interval.High, err = result.New(nil); err != nil {
+			return result.Value{}, err
+		}
+		interval.HighInclusive = false
+	}
+	return result.New(interval)
+}
+
 // ownOrEffectiveBound returns an interval's own bound and inclusivity, or the closed effective
 // bound from start()/end() when its own bound is null.
 func ownOrEffectiveBound(bound result.Value, inclusive bool, effective result.Value) (result.Value, bool) {
@@ -845,22 +892,22 @@ func (i *interpreter) evalIntersectIntervalDateTime(m model.IBinaryExpression, l
 		return result.Value{}, err
 	}
 
-	// If any bound is null, return null
-	if result.IsNull(lStart) || result.IsNull(lEnd) || result.IsNull(rStart) || result.IsNull(rEnd) {
-		return result.New(nil)
+	lInterval, _ := result.ToInterval(lObj)
+	unknown, err := fillUnknownBounds(&lStart, &lEnd, &rStart, &rEnd, lInterval.StaticType.PointType, &i.evaluationTimestamp)
+	if err != nil {
+		return result.Value{}, err
 	}
 
 	// Get interval metadata for result construction
-	lInterval, _ := result.ToInterval(lObj)
 
 	// Handle different date/time types
 	switch lInterval.StaticType.PointType {
 	case types.Date:
-		return i.evalIntersectIntervalDate(lStart, lEnd, rStart, rEnd, lInterval)
+		return unknown.apply(i.evalIntersectIntervalDate(lStart, lEnd, rStart, rEnd, lInterval))
 	case types.DateTime:
-		return i.evalIntersectIntervalDateTimeType(lStart, lEnd, rStart, rEnd, lInterval)
+		return unknown.apply(i.evalIntersectIntervalDateTimeType(lStart, lEnd, rStart, rEnd, lInterval))
 	case types.Time:
-		return i.evalIntersectIntervalTime(lStart, lEnd, rStart, rEnd, lInterval)
+		return unknown.apply(i.evalIntersectIntervalTime(lStart, lEnd, rStart, rEnd, lInterval))
 	default:
 		return result.Value{}, fmt.Errorf("internal error - unsupported date/time type in evalIntersectIntervalDateTime: %v", lInterval.StaticType.PointType)
 	}
@@ -1089,13 +1136,13 @@ func (i *interpreter) evalIntersectIntervalInteger(m model.IBinaryExpression, lO
 		return result.Value{}, err
 	}
 
-	// If any bound is null, return null
-	if result.IsNull(lStart) || result.IsNull(lEnd) || result.IsNull(rStart) || result.IsNull(rEnd) {
-		return result.New(nil)
+	lInterval, _ := result.ToInterval(lObj)
+	unknown, err := fillUnknownBounds(&lStart, &lEnd, &rStart, &rEnd, lInterval.StaticType.PointType, &i.evaluationTimestamp)
+	if err != nil {
+		return result.Value{}, err
 	}
 
 	// Get interval metadata for result construction
-	lInterval, _ := result.ToInterval(lObj)
 	rInterval, _ := result.ToInterval(rObj)
 
 	// Convert to int32 values
@@ -1108,7 +1155,7 @@ func (i *interpreter) evalIntersectIntervalInteger(m model.IBinaryExpression, lO
 		return result.Value{}, err
 	}
 
-	return i.calculateNumeralIntersectionInt32(lStartVal, lEndVal, rStartVal, rEndVal, lInterval, rInterval)
+	return unknown.apply(i.calculateNumeralIntersectionInt32(lStartVal, lEndVal, rStartVal, rEndVal, lInterval, rInterval))
 }
 
 func (i *interpreter) evalIntersectIntervalLong(m model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {
@@ -1127,13 +1174,13 @@ func (i *interpreter) evalIntersectIntervalLong(m model.IBinaryExpression, lObj,
 		return result.Value{}, err
 	}
 
-	// If any bound is null, return null
-	if result.IsNull(lStart) || result.IsNull(lEnd) || result.IsNull(rStart) || result.IsNull(rEnd) {
-		return result.New(nil)
+	lInterval, _ := result.ToInterval(lObj)
+	unknown, err := fillUnknownBounds(&lStart, &lEnd, &rStart, &rEnd, lInterval.StaticType.PointType, &i.evaluationTimestamp)
+	if err != nil {
+		return result.Value{}, err
 	}
 
 	// Get interval metadata for result construction
-	lInterval, _ := result.ToInterval(lObj)
 	rInterval, _ := result.ToInterval(rObj)
 
 	// Convert to int64 values
@@ -1146,7 +1193,7 @@ func (i *interpreter) evalIntersectIntervalLong(m model.IBinaryExpression, lObj,
 		return result.Value{}, err
 	}
 
-	return i.calculateNumeralIntersectionInt64(lStartVal, lEndVal, rStartVal, rEndVal, lInterval, rInterval)
+	return unknown.apply(i.calculateNumeralIntersectionInt64(lStartVal, lEndVal, rStartVal, rEndVal, lInterval, rInterval))
 }
 
 func (i *interpreter) evalIntersectIntervalDecimal(m model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {
@@ -1165,13 +1212,13 @@ func (i *interpreter) evalIntersectIntervalDecimal(m model.IBinaryExpression, lO
 		return result.Value{}, err
 	}
 
-	// If any bound is null, return null
-	if result.IsNull(lStart) || result.IsNull(lEnd) || result.IsNull(rStart) || result.IsNull(rEnd) {
-		return result.New(nil)
+	lInterval, _ := result.ToInterval(lObj)
+	unknown, err := fillUnknownBounds(&lStart, &lEnd, &rStart, &rEnd, lInterval.StaticType.PointType, &i.evaluationTimestamp)
+	if err != nil {
+		return result.Value{}, err
 	}
 
 	// Get interval metadata for result construction
-	lInterval, _ := result.ToInterval(lObj)
 	rInterval, _ := result.ToInterval(rObj)
 
 	lLow, lLowIncl := ownOrEffectiveBound(lInterval.Low, lInterval.LowInclusive, lStart)
@@ -1189,7 +1236,7 @@ func (i *interpreter) evalIntersectIntervalDecimal(m model.IBinaryExpression, lO
 		return result.Value{}, err
 	}
 
-	return i.calculateNumeralIntersectionFloat64(lStartVal, lEndVal, rStartVal, rEndVal, lLowIncl, lHighIncl, rLowIncl, rHighIncl, lInterval.StaticType)
+	return unknown.apply(i.calculateNumeralIntersectionFloat64(lStartVal, lEndVal, rStartVal, rEndVal, lLowIncl, lHighIncl, rLowIncl, rHighIncl, lInterval.StaticType))
 }
 
 func (i *interpreter) evalIntersectIntervalQuantity(m model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {
@@ -1208,13 +1255,13 @@ func (i *interpreter) evalIntersectIntervalQuantity(m model.IBinaryExpression, l
 		return result.Value{}, err
 	}
 
-	// If any bound is null, return null
-	if result.IsNull(lStart) || result.IsNull(lEnd) || result.IsNull(rStart) || result.IsNull(rEnd) {
-		return result.New(nil)
+	lInterval, _ := result.ToInterval(lObj)
+	unknown, err := fillUnknownBounds(&lStart, &lEnd, &rStart, &rEnd, lInterval.StaticType.PointType, &i.evaluationTimestamp)
+	if err != nil {
+		return result.Value{}, err
 	}
 
 	// Get interval metadata for result construction
-	lInterval, _ := result.ToInterval(lObj)
 	rInterval, _ := result.ToInterval(rObj)
 
 	lLow, lLowIncl := ownOrEffectiveBound(lInterval.Low, lInterval.LowInclusive, lStart)
@@ -1232,10 +1279,25 @@ func (i *interpreter) evalIntersectIntervalQuantity(m model.IBinaryExpression, l
 		return result.Value{}, err
 	}
 
-	// Check unit compatibility
-	if lStartVal.Unit != rStartVal.Unit {
-		return result.Value{}, fmt.Errorf("intersect operator received Quantities with differing unit values, unit conversion is not currently supported, got: %v, %v", lStartVal.Unit, rStartVal.Unit)
+	// Only non-null bounds carry a real unit; the min/max placeholders for null bounds take it on.
+	var unit model.Unit
+	for _, bound := range []result.Value{lInterval.Low, lInterval.High, rInterval.Low, rInterval.High} {
+		if result.IsNull(bound) {
+			continue
+		}
+		q, err := result.ToQuantity(bound)
+		if err != nil {
+			return result.Value{}, err
+		}
+		if unit == "" {
+			unit = q.Unit
+		} else if q.Unit != unit {
+			return result.Value{}, fmt.Errorf("intersect operator received Quantities with differing unit values, unit conversion is not currently supported, got: %v, %v", unit, q.Unit)
+		}
+	}
+	if unit != "" {
+		lStartVal.Unit, lEndVal.Unit, rStartVal.Unit, rEndVal.Unit = unit, unit, unit, unit
 	}
 
-	return i.calculateNumeralIntersectionQuantity(lStartVal, lEndVal, rStartVal, rEndVal, lLowIncl, lHighIncl, rLowIncl, rHighIncl, lInterval.StaticType)
+	return unknown.apply(i.calculateNumeralIntersectionQuantity(lStartVal, lEndVal, rStartVal, rEndVal, lLowIncl, lHighIncl, rLowIncl, rHighIncl, lInterval.StaticType))
 }
