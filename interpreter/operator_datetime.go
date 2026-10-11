@@ -911,11 +911,6 @@ func (i *interpreter) evalDateTimeComponentFrom(m model.IUnaryExpression, val re
 			return result.New(int32(dt.Date.Second()))
 		case model.MILLISECOND:
 			return result.New(int32(dt.Date.Nanosecond() / 1000000))
-		case model.TIMEZONEOFFSET:
-			// Extract timezone offset in hours from UTC
-			_, offset := dt.Date.Zone()
-			offsetHours := float64(offset) / 3600.0
-			return result.New(offsetHours)
 		default:
 			return result.Value{}, fmt.Errorf("unsupported date/time component: %v", dtComponent.Component)
 		}
@@ -952,7 +947,7 @@ func (i *interpreter) evalDateTimeComponentFrom(m model.IUnaryExpression, val re
 		}
 
 		switch dtComponent.Component {
-		case model.YEAR, model.MONTH, model.DAY:
+		case model.YEAR, model.MONTH, model.DAY, model.TIMEZONEOFFSET:
 			// These components don't exist in Time values
 			return result.New(nil)
 		case model.HOUR:

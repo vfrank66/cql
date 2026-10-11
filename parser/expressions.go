@@ -203,80 +203,60 @@ func (v *visitor) VisitTimeUnitExpressionTerm(ctx *cql.TimeUnitExpressionTermCon
 		return v.badExpression(fmt.Sprintf("unsupported date time component conversion (e.g. X in 'X from expression'). got: %s, supported components: date, year, month, day, hour, minute, second, millisecond", dtc.GetText()), ctx)
 	}
 
-	switch dateTimeComponent {
-	case "date":
+	operand := v.VisitExpression(ctx.ExpressionTerm())
+	if dateTimeComponent == "date" {
 		return &model.ToDate{
 			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
+				Operand:    operand,
 				Expression: model.ResultType(types.Date),
 			},
 		}
-	case "year":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Integer),
-			},
-			Component: model.YEAR,
-		}
-	case "month":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Integer),
-			},
-			Component: model.MONTH,
-		}
-	case "day":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Integer),
-			},
-			Component: model.DAY,
-		}
-	case "hour":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Integer),
-			},
-			Component: model.HOUR,
-		}
-	case "minute":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Integer),
-			},
-			Component: model.MINUTE,
-		}
-	case "second":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Integer),
-			},
-			Component: model.SECOND,
-		}
-	case "millisecond":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Integer),
-			},
-			Component: model.MILLISECOND,
-		}
-	case "timezoneoffset":
-		return &model.DateTimeComponentFrom{
-			UnaryExpression: &model.UnaryExpression{
-				Operand:    v.VisitExpression(ctx.ExpressionTerm()),
-				Expression: model.ResultType(types.Decimal),
-			},
-			Component: model.TIMEZONEOFFSET,
-		}
 	}
-	return v.badExpression(fmt.Sprintf("unsupported date time component conversion (e.g. X in 'X from expression'). got: %s, supported components: date, year, month, day, hour, minute, second, millisecond, timezoneoffset", dtc.GetText()), ctx)
+
+	resultType := types.Integer
+	var component model.DateTimePrecision
+	switch dateTimeComponent {
+	case "year":
+		component = model.YEAR
+	case "month":
+		component = model.MONTH
+	case "day":
+		component = model.DAY
+	case "hour":
+		component = model.HOUR
+	case "minute":
+		component = model.MINUTE
+	case "second":
+		component = model.SECOND
+	case "millisecond":
+		component = model.MILLISECOND
+	case "timezoneoffset":
+		component = model.TIMEZONEOFFSET
+		resultType = types.Decimal
+	default:
+		return v.badExpression(fmt.Sprintf("unsupported date time component conversion (e.g. X in 'X from expression'). got: %s, supported components: date, year, month, day, hour, minute, second, millisecond, timezoneoffset", dtc.GetText()), ctx)
+	}
+
+	overloads := []convert.Overload[types.IType]{
+		{Operands: []types.IType{types.Date}},
+		{Operands: []types.IType{types.DateTime}},
+		{Operands: []types.IType{types.Time}},
+	}
+	if operand.GetResultType().Equal(types.Any) {
+		// A null literal matches all three overloads equally, so resolve it as DateTime.
+		overloads = overloads[1:2]
+	}
+	matched, err := convert.OverloadMatch([]model.IExpression{operand}, overloads, v.modelInfo, "DateTimeComponentFrom")
+	if err != nil {
+		return v.badExpression(err.Error(), ctx)
+	}
+	return &model.DateTimeComponentFrom{
+		UnaryExpression: &model.UnaryExpression{
+			Operand:    matched.WrappedOperands[0],
+			Expression: model.ResultType(resultType),
+		},
+		Component: component,
+	}
 }
 
 func (v *visitor) VisitTupleSelectorTerm(ctx *cql.TupleSelectorTermContext) model.IExpression {

@@ -137,6 +137,21 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "month from (null as Date)",
 			wantResult: newOrFatal(t, nil),
 		},
+		{
+			name:       "Year from untyped null",
+			cql:        "year from null",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Second from untyped null",
+			cql:        "second from null",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:    "Year from Integer fails to resolve",
+			cql:     "year from 5",
+			wantErr: true,
+		},
 
 		// Precision boundary tests - requesting unavailable precision should return null
 		{
@@ -172,6 +187,11 @@ func TestDateTimeComponentFrom(t *testing.T) {
 		{
 			name:       "Day from Time returns null",
 			cql:        "day from @T14:30:25.123",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Timezone offset from Time returns null",
+			cql:        "timezoneoffset from @T14:30",
 			wantResult: newOrFatal(t, nil),
 		},
 
