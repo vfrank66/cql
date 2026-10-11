@@ -566,71 +566,67 @@ func (i *interpreter) sortByColumnOrExpression(objs []result.Value, sbis []model
 				return 0 // Return 0 to indicate equal, which preserves original order
 			}
 
-			switch ap.RuntimeType() {
-			case types.DateTime:
-				// In the future when we have an implementation of dateTime comparison without precision we should swap to using that.
-				// TODO(b/308012659): Implement dateTime comparison that doesn't take a precision.
-				av := ap.GolangValue().(result.DateTime).Date
-				bv := bp.GolangValue().(result.DateTime).Date
-				if av.Equal(bv) {
-					continue
-				} else if sortItem.SortDirection() == model.DESCENDING {
-					return bv.Compare(av)
-				}
-				return av.Compare(bv)
-			case types.Date:
-				av := ap.GolangValue().(result.Date).Date
-				bv := bp.GolangValue().(result.Date).Date
-				if av.Equal(bv) {
-					continue
-				} else if sortItem.SortDirection() == model.DESCENDING {
-					return bv.Compare(av)
-				}
-				return av.Compare(bv)
-			case types.Integer:
-				av := ap.GolangValue().(int32)
-				bv := bp.GolangValue().(int32)
-				if av == bv {
-					continue
-				} else if sortItem.SortDirection() == model.DESCENDING {
-					return compareNumeralInt(bv, av)
-				}
-				return compareNumeralInt(av, bv)
-			case types.Decimal:
-				av := ap.GolangValue().(float64)
-				bv := bp.GolangValue().(float64)
-				if av == bv {
-					continue
-				} else if sortItem.SortDirection() == model.DESCENDING {
-					return compareNumeralInt(bv, av)
-				}
-				return compareNumeralInt(av, bv)
-			case types.Long:
-				av := ap.GolangValue().(int64)
-				bv := bp.GolangValue().(int64)
-				if av == bv {
-					continue
-				} else if sortItem.SortDirection() == model.DESCENDING {
-					return compareNumeralInt(bv, av)
-				}
-				return compareNumeralInt(av, bv)
-			case types.String:
-				av := ap.GolangValue().(string)
-				bv := bp.GolangValue().(string)
-				cmp := strings.Compare(av, bv)
-				if cmp == 0 {
-					continue
-				} else if sortItem.SortDirection() == model.DESCENDING {
-					return -cmp
-				}
-				return cmp
-			default:
-				// For other types, try to continue with next sort item
+			c, err := compareSortValues(ap, bp)
+			if err != nil {
+				sortErr = err
+				return 0
+			}
+			if c == 0 {
 				continue
 			}
+			if sortItem.SortDirection() == model.DESCENDING {
+				return -c
+			}
+			return c
 		}
 		// All columns evaluated to equal so this sort is undefined.
 		return 0
 	})
 	return sortErr
+}
+
+// compareSortValues orders two sort values of the same type. Values of a type that cannot be
+// ordered compare as equal, so the next sort item decides.
+func compareSortValues(a, b result.Value) (int, error) {
+	switch a.RuntimeType() {
+	case types.DateTime:
+		// In the future when we have an implementation of dateTime comparison without precision we should swap to using that.
+		// TODO(b/308012659): Implement dateTime comparison that doesn't take a precision.
+		av, bv, err := applyToValues(a, b, result.ToDateTime)
+		if err != nil {
+			return 0, err
+		}
+		return av.Date.Compare(bv.Date), nil
+	case types.Date:
+		av, bv, err := applyToValues(a, b, result.ToDate)
+		if err != nil {
+			return 0, err
+		}
+		return av.Date.Compare(bv.Date), nil
+	case types.Integer:
+		av, bv, err := applyToValues(a, b, result.ToInt32)
+		if err != nil {
+			return 0, err
+		}
+		return compareNumeralInt(av, bv), nil
+	case types.Long:
+		av, bv, err := applyToValues(a, b, result.ToInt64)
+		if err != nil {
+			return 0, err
+		}
+		return compareNumeralInt(av, bv), nil
+	case types.Decimal:
+		av, bv, err := applyToValues(a, b, result.ToFloat64)
+		if err != nil {
+			return 0, err
+		}
+		return compareNumeralInt(av, bv), nil
+	case types.String:
+		av, bv, err := applyToValues(a, b, result.ToString)
+		if err != nil {
+			return 0, err
+		}
+		return strings.Compare(av, bv), nil
+	}
+	return 0, nil
 }
