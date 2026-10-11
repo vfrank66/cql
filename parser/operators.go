@@ -1766,7 +1766,7 @@ func (p *Parser) loadSystemOperators() error {
 		},
 		// LIST OPERATORS - https://cql.hl7.org/09-b-cqlreference.html#list-operators-2
 		{
-			name:     "Except",
+			name: "Except",
 			operands: [][]types.IType{
 				{&types.List{ElementType: types.Any}, &types.List{ElementType: types.Any}},
 				// INTERVAL OPERATORS - https://cql.hl7.org/09-b-cqlreference.html#interval-operators-3

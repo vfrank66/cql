@@ -1970,8 +1970,8 @@ func TestExceptInterval(t *testing.T) {
 			}),
 		},
 		{
-			name:       "Integer interval except - partial overlap left",
-			cql:        "Interval[0, 5] except Interval[3, 7]",
+			name: "Integer interval except - partial overlap left",
+			cql:  "Interval[0, 5] except Interval[3, 7]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(0)),
 				High:          newOrFatal(t, int32(2)),
@@ -1981,8 +1981,8 @@ func TestExceptInterval(t *testing.T) {
 			}),
 		},
 		{
-			name:       "Integer interval except - partial overlap right",
-			cql:        "Interval[5, 10] except Interval[0, 7]",
+			name: "Integer interval except - partial overlap right",
+			cql:  "Interval[5, 10] except Interval[0, 7]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(8)),
 				High:          newOrFatal(t, int32(10)),
@@ -2018,8 +2018,8 @@ func TestExceptInterval(t *testing.T) {
 		},
 		// Decimal intervals
 		{
-			name:       "Decimal interval except - no overlap",
-			cql:        "Interval[0.0, 5.0] except Interval[10.0, 15.0]",
+			name: "Decimal interval except - no overlap",
+			cql:  "Interval[0.0, 5.0] except Interval[10.0, 15.0]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, 0.0),
 				High:          newOrFatal(t, 5.0),
@@ -2029,8 +2029,8 @@ func TestExceptInterval(t *testing.T) {
 			}),
 		},
 		{
-			name:       "Decimal interval except - partial overlap",
-			cql:        "Interval[0.0, 5.0] except Interval[3.0, 7.0]",
+			name: "Decimal interval except - partial overlap",
+			cql:  "Interval[0.0, 5.0] except Interval[3.0, 7.0]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, 0.0),
 				High:          newOrFatal(t, 2.99999999),
@@ -2041,8 +2041,8 @@ func TestExceptInterval(t *testing.T) {
 		},
 		// Long intervals
 		{
-			name:       "Long interval except - no overlap",
-			cql:        "Interval[0L, 5L] except Interval[10L, 15L]",
+			name: "Long interval except - no overlap",
+			cql:  "Interval[0L, 5L] except Interval[10L, 15L]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int64(0)),
 				High:          newOrFatal(t, int64(5)),
@@ -2052,8 +2052,8 @@ func TestExceptInterval(t *testing.T) {
 			}),
 		},
 		{
-			name:       "Long interval except - partial overlap",
-			cql:        "Interval[0L, 5L] except Interval[3L, 7L]",
+			name: "Long interval except - partial overlap",
+			cql:  "Interval[0L, 5L] except Interval[3L, 7L]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int64(0)),
 				High:          newOrFatal(t, int64(2)),
@@ -2064,8 +2064,8 @@ func TestExceptInterval(t *testing.T) {
 		},
 		// Quantity intervals
 		{
-			name:       "Quantity interval except - no overlap",
-			cql:        "Interval[0'cm', 5'cm'] except Interval[10'cm', 15'cm']",
+			name: "Quantity interval except - no overlap",
+			cql:  "Interval[0'cm', 5'cm'] except Interval[10'cm', 15'cm']",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, result.Quantity{Value: 0, Unit: "cm"}),
 				High:          newOrFatal(t, result.Quantity{Value: 5, Unit: "cm"}),
@@ -2075,8 +2075,8 @@ func TestExceptInterval(t *testing.T) {
 			}),
 		},
 		{
-			name:       "Quantity interval except - partial overlap",
-			cql:        "Interval[0'cm', 5'cm'] except Interval[3'cm', 7'cm']",
+			name: "Quantity interval except - partial overlap",
+			cql:  "Interval[0'cm', 5'cm'] except Interval[3'cm', 7'cm']",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, result.Quantity{Value: 0, Unit: "cm"}),
 				High:          newOrFatal(t, result.Quantity{Value: 2.99999999, Unit: "cm"}),
@@ -2087,8 +2087,8 @@ func TestExceptInterval(t *testing.T) {
 		},
 		// Date intervals (simplified - returns null for complex cases)
 		{
-			name:       "Date interval except - no overlap",
-			cql:        "Interval[@2020-01-01, @2020-01-05] except Interval[@2020-01-10, @2020-01-15]",
+			name: "Date interval except - no overlap",
+			cql:  "Interval[@2020-01-01, @2020-01-05] except Interval[@2020-01-10, @2020-01-15]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, result.Date{Date: time.Date(2020, time.January, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
 				High:          newOrFatal(t, result.Date{Date: time.Date(2020, time.January, 5, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
@@ -2104,8 +2104,8 @@ func TestExceptInterval(t *testing.T) {
 		},
 		// DateTime intervals (simplified - returns null for complex cases)
 		{
-			name:       "DateTime interval except - no overlap",
-			cql:        "Interval[@2020-01-01T, @2020-01-05T] except Interval[@2020-01-10T, @2020-01-15T]",
+			name: "DateTime interval except - no overlap",
+			cql:  "Interval[@2020-01-01T, @2020-01-05T] except Interval[@2020-01-10T, @2020-01-15T]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
 				High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 5, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
