@@ -179,8 +179,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				// TODO: b/342064012 - Uncertain result.
 				"DateAdd33Days",
 				"DateSubtract33Days",
-				"DateTimeDurationBetweenUncertainInterval",
-				"DateTimeDurationBetweenUncertainInterval2",
 				"DateTimeDurationBetweenUncertainAdd",
 				"DateTimeDurationBetweenUncertainSubtract",
 				"DateTimeDurationBetweenUncertainMultiply",
@@ -189,11 +187,8 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"DateTimeDurationBetweenMonthUncertain2",
 				"DateTimeDurationBetweenMonthUncertain3",
 				"DateTimeDurationBetweenMonthUncertain4",
-				"DateTimeDurationBetweenMonthUncertain5",
 				"DateTimeDurationBetweenMonthUncertain6",
 				"DateTimeDurationBetweenMonthUncertain7",
-				"DurationInWeeks",
-				"DurationInWeeks2",
 				"DateTimeSubtract1YearInSeconds",
 				"TimeDurationBetweenHour",
 				"TimeDurationBetweenHourDiffPrecision",
@@ -201,10 +196,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"TimeDurationBetweenMinute",
 				"TimeDurationBetweenSecond",
 				"TimeDurationBetweenMillis",
-				"DurationInHoursA",
-				"DurationInMinutesA",
-				"DurationInDaysA",
-				"DurationInDaysAA",
 				"DateTimeDifferenceUncertain",
 				// TODO: b/343800835 - Error in output date comparison based on execution timestamp logic.
 				"DateTimeComponentFromDate",
@@ -373,8 +364,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 		"CqlTypesTest.xml": {
 			GroupExcludes: []string{},
 			NamesExcludes: []string{
-				// TODO: b/342064012 - Uncertain result.
-				"DateTimeUncertain",
 				// TODO: b/342061715 - unsupported operators.
 				"DateTimeTimeUnspecified",
 				// TODO: b/343515613 - fails with unexpected result. Technically not supported.

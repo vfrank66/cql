@@ -1133,7 +1133,7 @@ func TestDurationOperators(t *testing.T) {
 		{
 			name:       "Years between dates - negative",
 			cql:        "years between @2010-05-01 and @2005-04-30",
-			wantResult: newOrFatal(t, -6),
+			wantResult: newOrFatal(t, -5),
 		},
 		{
 			name:       "Months between dates",
@@ -1222,7 +1222,7 @@ func TestDurationOperators(t *testing.T) {
 		{
 			name:       "Weeks between datetimes",
 			cql:        "weeks between DateTime(2012, 3, 10, 22, 5, 9) and DateTime(2012, 3, 24, 7, 19, 33)",
-			wantResult: newOrFatal(t, 2),
+			wantResult: newOrFatal(t, 1),
 		},
 
 		// Complex interval calculations
@@ -1297,31 +1297,19 @@ func TestDurationBetweenWithTimezones(t *testing.T) {
 		wantResult result.Value
 	}{
 		{
-			name: "Hours between with timezone offset",
-			cql:  "hours between @2017-03-12T01:00:00-07:00 and @2017-03-12T03:00:00-06:00",
-			wantResult: newOrFatal(t, result.Interval{
-				Low:           newOrFatal(t, 0),
-				High:          newOrFatal(t, 1),
-				LowInclusive:  true,
-				HighInclusive: true,
-				StaticType:    &types.Interval{PointType: types.Integer},
-			}),
+			name:       "Hours between with timezone offset",
+			cql:        "hours between @2017-03-12T01:00:00-07:00 and @2017-03-12T03:00:00-06:00",
+			wantResult: newOrFatal(t, 1),
 		},
 		{
-			name: "Minutes between with timezone offset",
-			cql:  "minutes between @2017-11-05T01:30:00-06:00 and @2017-11-05T01:15:00-07:00",
-			wantResult: newOrFatal(t, result.Interval{
-				Low:           newOrFatal(t, 44),
-				High:          newOrFatal(t, 45),
-				LowInclusive:  true,
-				HighInclusive: true,
-				StaticType:    &types.Interval{PointType: types.Integer},
-			}),
+			name:       "Minutes between with timezone offset",
+			cql:        "minutes between @2017-11-05T01:30:00-06:00 and @2017-11-05T01:15:00-07:00",
+			wantResult: newOrFatal(t, 45),
 		},
 		{
 			name:       "Days between with timezone offset",
 			cql:        "days between @2017-03-12T00:00:00-07:00 and @2017-03-13T00:00:00-06:00",
-			wantResult: newOrFatal(t, 1),
+			wantResult: newOrFatal(t, 0),
 		},
 	}
 
@@ -1340,6 +1328,136 @@ func TestDurationBetweenWithTimezones(t *testing.T) {
 
 			gotResult := getTESTRESULTWithSources(t, results)
 			if diff := cmp.Diff(tc.wantResult, gotResult, protocmp.Transform()); diff != "" {
+				t.Errorf("Eval diff (-want +got)\n%v", diff)
+			}
+		})
+	}
+}
+
+func TestDurationCountsWholePeriods(t *testing.T) {
+	tests := []struct {
+		name       string
+		cql        string
+		wantResult result.Value
+	}{
+		// Difference counts boundaries crossed and must not change with duration.
+		{
+			name:       "Difference in years crosses one boundary",
+			cql:        "difference in years between @2014-12-31 and @2015-01-01",
+			wantResult: newOrFatal(t, 1),
+		},
+		{
+			name:       "Difference in months crosses one boundary",
+			cql:        "difference in months between @2014-01-31 and @2014-02-01",
+			wantResult: newOrFatal(t, 1),
+		},
+		{
+			name:       "Difference in years between datetimes crosses one boundary",
+			cql:        "difference in years between DateTime(2014, 12, 31) and DateTime(2015, 1, 1)",
+			wantResult: newOrFatal(t, 1),
+		},
+		{
+			name:       "Years between dates one day apart",
+			cql:        "years between @2014-12-31 and @2015-01-01",
+			wantResult: newOrFatal(t, 0),
+		},
+		{
+			name:       "Months between negative truncates toward zero",
+			cql:        "months between @2014-03-05 and @2014-02-04",
+			wantResult: newOrFatal(t, -1),
+		},
+		{
+			name:       "Months between negative from month end",
+			cql:        "months between @2014-03-31 and @2014-02-28",
+			wantResult: newOrFatal(t, -1),
+		},
+		{
+			name:       "Years between negative truncates toward zero",
+			cql:        "years between @2014-03-05 and @2013-03-04",
+			wantResult: newOrFatal(t, -1),
+		},
+		{
+			name:       "Years between negative from leap day",
+			cql:        "years between @2016-02-29 and @2015-02-28",
+			wantResult: newOrFatal(t, -1),
+		},
+		{
+			name:       "Weeks between dates two days apart across Sunday",
+			cql:        "weeks between @2014-01-04 and @2014-01-06",
+			wantResult: newOrFatal(t, 0),
+		},
+		{
+			name:       "Weeks between dates six days apart",
+			cql:        "weeks between @2014-01-07 and @2014-01-13",
+			wantResult: newOrFatal(t, 0),
+		},
+		{
+			name:       "Weeks between negative",
+			cql:        "weeks between @2014-01-14 and @2014-01-01",
+			wantResult: newOrFatal(t, -1),
+		},
+		{
+			name:       "Days between datetimes across midnight",
+			cql:        "days between @2014-01-01T23:00:00.000+00:00 and @2014-01-02T01:00:00.000+00:00",
+			wantResult: newOrFatal(t, 0),
+		},
+		{
+			name:       "Days between datetimes 47 hours apart",
+			cql:        "days between @2014-01-01T01:00:00.000+00:00 and @2014-01-03T00:00:00.000+00:00",
+			wantResult: newOrFatal(t, 1),
+		},
+		{
+			name:       "Duration in days of interval across midnight",
+			cql:        "duration in days of Interval[@2014-01-01T23:00:00.000+00:00, @2014-01-02T01:00:00.000+00:00]",
+			wantResult: newOrFatal(t, 0),
+		},
+		{
+			name:       "Hours between second precision datetimes is certain",
+			cql:        "hours between @2014-01-01T00:00:00+00:00 and @2014-01-01T05:00:00+00:00",
+			wantResult: newOrFatal(t, 5),
+		},
+		{
+			name:       "Minutes between second precision datetimes is certain",
+			cql:        "minutes between DateTime(2014, 1, 1, 0, 0) and DateTime(2014, 1, 1, 0, 5, 0)",
+			wantResult: newOrFatal(t, 5),
+		},
+		{
+			name: "Duration in days of interval with coarse end is uncertain",
+			cql:  "duration in days of Interval[DateTime(2014, 1, 15), DateTime(2014, 2)]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, 16),
+				High:          newOrFatal(t, 44),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name:       "Days between dates far apart does not saturate",
+			cql:        "days between @2012-01-01 and @9999-12-31",
+			wantResult: newOrFatal(t, 2917556),
+		},
+		{
+			name:       "Duration in weeks of date interval",
+			cql:        "duration in weeks of Interval[@2012-01-01, @2012-01-31]",
+			wantResult: newOrFatal(t, 4),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newFHIRParser(t)
+			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
+			if err != nil {
+				t.Fatalf("Parse returned unexpected error: %v", err)
+			}
+
+			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
+			if err != nil {
+				t.Fatalf("Eval returned unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.wantResult, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
 				t.Errorf("Eval diff (-want +got)\n%v", diff)
 			}
 		})
