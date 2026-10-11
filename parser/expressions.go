@@ -20,13 +20,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/google/cql/internal/convert"
 	"github.com/google/cql/internal/datehelpers"
 	"github.com/google/cql/internal/embeddata/third_party/cqframework/cql"
 	"github.com/google/cql/model"
 	"github.com/google/cql/types"
 	"github.com/google/cql/ucum"
-	"github.com/antlr4-go/antlr/v4"
 )
 
 func (v *visitor) VisitExpression(tree antlr.Tree) model.IExpression {
