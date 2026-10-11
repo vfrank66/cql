@@ -2,11 +2,13 @@ package enginetests
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/cql/interpreter"
 	"github.com/google/cql/parser"
 	"github.com/google/cql/result"
+	"github.com/google/cql/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/lithammer/dedent"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -109,24 +111,73 @@ func TestCrossLibraryAliasResolution(t *testing.T) {
 			},
 			wantResult: newOrFatal(t, false), // Empty retrievals
 		},
+		{
+			name: "Outer alias M keeps its value after a called function's query also declares M",
+			libraries: []string{
+				dedent.Dedent(`
+				library TestCommons version '1.0.0'
+				using FHIR version '4.0.1'
+
+				define function Above(L List<Integer>, Threshold Integer):
+				  L M
+				    where M > Threshold
+				`),
+				dedent.Dedent(`
+				library MainLib version '1.0.0'
+				using FHIR version '4.0.1'
+				include TestCommons version '1.0.0' called TC
+
+				define TESTRESULT:
+				  ({1, 2, 3}) M
+				    where exists(TC.Above({6, 7}, 5)) and M < 3
+				`),
+			},
+			wantResult: newOrFatal(t, result.List{
+				Value:      []result.Value{newOrFatal(t, 1), newOrFatal(t, 2)},
+				StaticType: &types.List{ElementType: types.Integer},
+			}),
+		},
+		{
+			name: "Alias M declared only by a called function's query is not in scope for the caller",
+			libraries: []string{
+				dedent.Dedent(`
+				library TestCommons version '1.0.0'
+				using FHIR version '4.0.1'
+
+				define function Above(L List<Integer>, Threshold Integer):
+				  L M
+				    where M > Threshold
+				`),
+				dedent.Dedent(`
+				library MainLib version '1.0.0'
+				using FHIR version '4.0.1'
+				include TestCommons version '1.0.0' called TC
+
+				define TESTRESULT:
+				  ({1, 2, 3}) N
+				    where exists(TC.Above({6, 7}, 5)) and M < 3
+				`),
+			},
+			wantError: "could not resolve the local reference to M",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newFHIRParser(t)
-			
+
 			// Add FHIRHelpers to all libraries
 			libsWithHelpers := make([]string, len(tc.libraries))
 			for i, lib := range tc.libraries {
 				libsWithHelpers[i] = addFHIRHelpersLib(t, lib)[0]
 			}
-			
+
 			parsedLibs, err := p.Libraries(context.Background(), libsWithHelpers, parser.Config{})
 			if tc.wantError != "" {
 				if err == nil {
 					t.Fatalf("Expected parse error containing %q, but got no error", tc.wantError)
 				}
-				if !contains(err.Error(), tc.wantError) {
+				if !strings.Contains(err.Error(), tc.wantError) {
 					t.Fatalf("Expected parse error containing %q, but got: %v", tc.wantError, err)
 				}
 				return
@@ -140,7 +191,7 @@ func TestCrossLibraryAliasResolution(t *testing.T) {
 				if err == nil {
 					t.Fatalf("Expected eval error containing %q, but got no error", tc.wantError)
 				}
-				if !contains(err.Error(), tc.wantError) {
+				if !strings.Contains(err.Error(), tc.wantError) {
 					t.Fatalf("Expected eval error containing %q, but got: %v", tc.wantError, err)
 				}
 				return
@@ -148,24 +199,11 @@ func TestCrossLibraryAliasResolution(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Eval returned unexpected error: %v", err)
 			}
-			
+
 			gotResult := getTESTRESULTWithSources(t, results)
 			if diff := cmp.Diff(tc.wantResult, gotResult, protocmp.Transform()); diff != "" {
 				t.Errorf("Eval diff (-want +got)\n%v", diff)
 			}
 		})
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
-		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		func() bool {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
-			return false
-		}())))
 }

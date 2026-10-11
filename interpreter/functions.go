@@ -51,8 +51,8 @@ func (i *interpreter) evalFunctionRef(f *model.FunctionRef) (result.Value, error
 	if resolved.External {
 		return result.Value{}, fmt.Errorf("function %v is external, but external functions are not supported", f.Name)
 	}
-	i.refs.EnterScope()
-	defer i.refs.ExitScope()
+	i.refs.EnterFunctionScope()
+	defer i.refs.ExitFunctionScope()
 	for j, op := range ops {
 		if err := i.refs.Alias(resolved.Operands[j].Name, op); err != nil {
 			return result.Value{}, err

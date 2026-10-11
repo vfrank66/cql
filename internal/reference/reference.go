@@ -56,6 +56,9 @@ type Resolver[T any, F any] struct {
 	// defined. Aliases live in the same namespace as definitions.
 	aliases []map[aliasKey]T
 
+	// callerAliases holds the alias stacks hidden by EnterFunctionScope, innermost call last.
+	callerAliases [][]map[aliasKey]T
+
 	// scopedStructs hold the struct that are currently in scope for evaluation. For instance,
 	// an an expression like `[Encounter] O sort by start of period` places each encounter in scope,
 	// for the sorting criteria, and `period` is resolved against that encounter struct.
@@ -109,6 +112,7 @@ func (r *Resolver[T, F]) ClearDefs() {
 	r.defs = make(map[defKey]exprDef[T])
 	r.funcs = make(map[defKey][]funcDef[F])
 	r.aliases = make([]map[aliasKey]T, 0)
+	r.callerAliases = nil
 	r.libs = make(map[namedLibKey]struct{})
 	r.includedLibs = make(map[includeKey]*model.LibraryIdentifier)
 }
@@ -450,25 +454,20 @@ func (r *Resolver[T, F]) Alias(name string, a T) error {
 	return nil
 }
 
-// UpdateAlias updates an existing alias in any scope with a new value. This is used to update
-// source aliases with iteration-specific values while maintaining the persistent scope structure.
-// The alias must already exist in some scope.
-func (r *Resolver[T, F]) UpdateAlias(name string, a T) error {
-	if len(r.aliases) == 0 {
-		return errors.New("internal error - no scope available for alias update")
+// EnterFunctionScope hides the caller's aliases until ExitFunctionScope is called. A function body
+// can only reference its own operands and aliases, so a query inside it may reuse an alias name that
+// the calling query already declared.
+func (r *Resolver[T, F]) EnterFunctionScope() {
+	r.callerAliases = append(r.callerAliases, r.aliases)
+	r.aliases = []map[aliasKey]T{make(map[aliasKey]T)}
+}
+
+// ExitFunctionScope removes the function's aliases and restores the caller's aliases.
+func (r *Resolver[T, F]) ExitFunctionScope() {
+	if n := len(r.callerAliases); n > 0 {
+		r.aliases = r.callerAliases[n-1]
+		r.callerAliases = r.callerAliases[:n-1]
 	}
-	
-	aKey := aliasKey{r.currLib, name}
-	
-	// Search from innermost to outermost scope to find the alias
-	for i := len(r.aliases) - 1; i >= 0; i-- {
-		if _, exists := r.aliases[i][aKey]; exists {
-			r.aliases[i][aKey] = a
-			return nil
-		}
-	}
-	
-	return fmt.Errorf("alias %s does not exist in any scope", name)
 }
 
 // PublicDefs returns the public definitions stored in the reference resolver.

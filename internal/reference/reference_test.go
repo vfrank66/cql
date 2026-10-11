@@ -1102,46 +1102,58 @@ func buildLibrary(t *testing.T, r *Resolver[model.IExpression, model.IExpression
 	}
 }
 
-func TestUpdateAlias(t *testing.T) {
+func TestFunctionScopeHidesCallerAliases(t *testing.T) {
+	r := NewResolver[string, string]()
+	r.SetCurrentUnnamed()
+	r.EnterScope()
+	if err := r.Alias("M", "outer"); err != nil {
+		t.Fatalf("Alias(M) unexpected err: %v", err)
+	}
+
+	r.EnterFunctionScope()
+	if _, err := r.ResolveLocal("M"); err == nil {
+		t.Errorf("ResolveLocal(M) inside function scope expected error got success")
+	}
+	// The function body may declare an alias with the same name as the caller's alias.
+	if err := r.Alias("M", "inner"); err != nil {
+		t.Fatalf("Alias(M) inside function scope unexpected err: %v", err)
+	}
+	got, err := r.ResolveLocal("M")
+	if err != nil {
+		t.Fatalf("ResolveLocal(M) inside function scope unexpected err: %v", err)
+	}
+	if got != "inner" {
+		t.Errorf("ResolveLocal(M) inside function scope = %v, want %v", got, "inner")
+	}
+	r.ExitFunctionScope()
+
+	got, err = r.ResolveLocal("M")
+	if err != nil {
+		t.Fatalf("ResolveLocal(M) after function scope unexpected err: %v", err)
+	}
+	if got != "outer" {
+		t.Errorf("ResolveLocal(M) after function scope = %v, want %v", got, "outer")
+	}
+}
+
+func TestFunctionScopeAliasesRemovedOnExit(t *testing.T) {
 	r := NewResolver[string, string]()
 	r.SetCurrentUnnamed()
 	r.EnterScope()
 
-	// Create initial alias
-	if err := r.Alias("A", "initial_value"); err != nil {
-		t.Fatalf("Alias(A) returned unexpected error: %v", err)
+	r.EnterFunctionScope()
+	if err := r.Alias("A", "inner"); err != nil {
+		t.Fatalf("Alias(A) unexpected err: %v", err)
 	}
+	r.ExitFunctionScope()
 
-	// Verify initial value
-	got, err := r.ResolveLocal("A")
-	if err != nil {
-		t.Errorf("ResolveLocal(A) returned unexpected error: %v", err)
+	wantError := "could not resolve the local reference"
+	_, gotError := r.ResolveLocal("A")
+	if gotError == nil {
+		t.Fatalf("ResolveLocal(A) expected error got success")
 	}
-	if got != "initial_value" {
-		t.Errorf("ResolveLocal(A) = %v, want %v", got, "initial_value")
-	}
-
-	// Update alias
-	if err := r.UpdateAlias("A", "updated_value"); err != nil {
-		t.Fatalf("UpdateAlias(A) returned unexpected error: %v", err)
-	}
-
-	// Verify updated value
-	got, err = r.ResolveLocal("A")
-	if err != nil {
-		t.Errorf("ResolveLocal(A) returned unexpected error: %v", err)
-	}
-	if got != "updated_value" {
-		t.Errorf("ResolveLocal(A) = %v, want %v", got, "updated_value")
-	}
-
-	// Test error case - update non-existent alias
-	err = r.UpdateAlias("NonExistent", "value")
-	if err == nil {
-		t.Errorf("UpdateAlias(NonExistent) expected error but got success")
-	}
-	if !strings.Contains(err.Error(), "does not exist") {
-		t.Errorf("UpdateAlias error should contain 'does not exist', got: %v", err)
+	if !strings.Contains(gotError.Error(), wantError) {
+		t.Errorf("Returned error (%s) did not contain (%s)", gotError.Error(), wantError)
 	}
 }
 

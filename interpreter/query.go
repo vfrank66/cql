@@ -53,8 +53,7 @@ type alias struct {
 }
 
 func (i *interpreter) evalQuery(q *model.Query) (result.Value, error) {
-	// The top level scope holds let clauses. Each query iteration defines a nested scope for the
-	// source and relationship aliases.
+	// Each query iteration defines a nested scope for its source, let and relationship aliases.
 	i.refs.EnterScope()
 	defer i.refs.ExitScope()
 
@@ -63,27 +62,21 @@ func (i *interpreter) evalQuery(q *model.Query) (result.Value, error) {
 		return result.Value{}, err
 	}
 
-	// Register let clauses in the query scope (they will be evaluated per iteration)
-	if len(q.Let) > 0 {
-		for _, letClause := range q.Let {
-			// Register let variables with placeholder values - they'll be updated per iteration
-			if err := i.refs.Alias(letClause.Identifier, result.Value{}); err != nil {
-				return result.Value{}, err
-			}
-		}
+	if err := i.letClause(iters, q.Let); err != nil {
+		return result.Value{}, err
 	}
 
 	for _, relationship := range q.Relationship {
 		var err error
 		var sourceObj result.Value
-		iters, sourceObj, err = i.relationshipClause(iters, relationship, q.Let)
+		iters, sourceObj, err = i.relationshipClause(iters, relationship)
 		if err != nil {
 			return result.Value{}, err
 		}
 		sourceObjs = append(sourceObjs, sourceObj)
 	}
 
-	iters, err = i.whereClause(iters, q.Where, q.Let)
+	iters, err = i.whereClause(iters, q.Where)
 	if err != nil {
 		return result.Value{}, err
 	}
@@ -99,7 +92,7 @@ func (i *interpreter) evalQuery(q *model.Query) (result.Value, error) {
 	}
 
 	if q.Return != nil {
-		finalVals, err = i.returnClause(iters, q.Return, q.Let)
+		finalVals, err = i.returnClause(iters, q.Return)
 		if err != nil {
 			return result.Value{}, err
 		}
@@ -107,11 +100,10 @@ func (i *interpreter) evalQuery(q *model.Query) (result.Value, error) {
 
 	if q.Return == nil && q.Aggregate == nil {
 		if len(q.Source) == 1 {
-			// If there is no return clause and this was a single source query, unpack the alias.
+			// If there is no return clause and this was a single source query, unpack the alias. The
+			// iteration also holds the let values, so take only the source alias.
 			for _, iter := range iters {
-				for _, alias := range iter {
-					finalVals = append(finalVals, alias.obj)
-				}
+				finalVals = append(finalVals, iter[q.Source[0].Alias].obj)
 			}
 		} else {
 			return result.Value{}, errors.New("internal error - multi-source queries must have a return clause, the parser should insert a default one if the user did not write one")
@@ -182,10 +174,7 @@ func (i *interpreter) sourceClause(s []*model.AliasedSource) ([]iteration, []res
 		}
 		aliases = append(aliases, a)
 	}
-
-	iterations := cartesianProduct(aliases)
-
-	return iterations, sourceObjs, nil
+	return cartesianProduct(aliases), sourceObjs, nil
 }
 
 // cartesianProduct converts [[{A, 4}], [{B, 1}, {B, 2}, {B, 3}]] into the cartesian product
@@ -214,8 +203,42 @@ func cartesianProduct(aliases [][]alias) []iteration {
 	return cartIters
 }
 
+// letClause evaluates the let clauses once per iteration, after the source aliases are defined, and
+// stores each value in the iteration so every later clause sees it as an alias.
+func (i *interpreter) letClause(iters []iteration, lets []*model.LetClause) error {
+	if len(lets) == 0 {
+		return nil
+	}
+	for _, iter := range iters {
+		if err := i.evalLetsForIteration(iter, lets); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-func (i *interpreter) relationshipClause(iters []iteration, m model.IRelationshipClause, letClauses []*model.LetClause) ([]iteration, result.Value, error) {
+func (i *interpreter) evalLetsForIteration(iter iteration, lets []*model.LetClause) error {
+	i.refs.EnterScope()
+	defer i.refs.ExitScope()
+	for _, a := range iter {
+		if err := i.refs.Alias(a.alias, a.obj); err != nil {
+			return err
+		}
+	}
+	for _, l := range lets {
+		obj, err := i.evalExpression(l.Expression)
+		if err != nil {
+			return err
+		}
+		if err := i.refs.Alias(l.Identifier, obj); err != nil {
+			return err
+		}
+		iter[l.Identifier] = alias{alias: l.Identifier, obj: obj}
+	}
+	return nil
+}
+
+func (i *interpreter) relationshipClause(iters []iteration, m model.IRelationshipClause) ([]iteration, result.Value, error) {
 	var relAliasName string
 	var relAliasSource model.IExpression
 	var suchThat model.IExpression
@@ -251,34 +274,19 @@ func (i *interpreter) relationshipClause(iters []iteration, m model.IRelationshi
 		return nil, result.Value{}, err
 	}
 
-	// Register the relationship alias in the query scope
-	if len(relIters) > 0 {
-		if err := i.refs.Alias(relAliasName, relIters[0]); err != nil {
-			return nil, result.Value{}, err
-		}
-	}
-
 	filteredIters := []iteration{}
 	for _, iter := range iters {
 		for _, relIter := range relIters {
-			// Register or update source aliases with current iteration values
+			i.refs.EnterScope()
+			// Define the alias for the relationship.
+			if err := i.refs.Alias(relAliasName, relIter); err != nil {
+				return nil, result.Value{}, err
+			}
+			// Define the aliases for the query iterations.
 			for _, alias := range iter {
-				if err := i.refs.UpdateAlias(alias.alias, alias.obj); err != nil {
-					// If UpdateAlias fails, the alias doesn't exist yet, so create it
-					if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
-						return nil, result.Value{}, err
-					}
+				if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
+					return nil, result.Value{}, err
 				}
-			}
-			
-			// Update the relationship alias with current relationship iteration value
-			if err := i.refs.UpdateAlias(relAliasName, relIter); err != nil {
-				return nil, result.Value{}, err
-			}
-
-			// Evaluate let clauses for this iteration
-			if err := i.evaluateLetClauses(letClauses); err != nil {
-				return nil, result.Value{}, err
 			}
 
 			filter, err := i.evalExpression(suchThat)
@@ -292,34 +300,29 @@ func (i *interpreter) relationshipClause(iters []iteration, m model.IRelationshi
 			if (with && filter.GolangValue() == true) || (!with && filter.GolangValue() == false) {
 				// We found a relationship where such that expression evaluated to true. Save this iter in
 				// filteredIters and break.
+				i.refs.ExitScope()
 				filteredIters = append(filteredIters, iter)
 				break
 			}
+			i.refs.ExitScope()
 		}
 	}
 	return filteredIters, relSourceObj, nil
 }
 
-func (i *interpreter) whereClause(iters []iteration, where model.IExpression, letClauses []*model.LetClause) ([]iteration, error) {
+func (i *interpreter) whereClause(iters []iteration, where model.IExpression) ([]iteration, error) {
 	if where == nil {
 		return iters, nil
 	}
 
 	var filteredIters []iteration
 	for _, iter := range iters {
-
+		i.refs.EnterScope()
 		for _, alias := range iter {
-			if err := i.refs.UpdateAlias(alias.alias, alias.obj); err != nil {
-				if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
-					return nil, err
-				}
+			if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
+				return nil, err
 			}
 		}
-		
-		if err := i.evaluateLetClauses(letClauses); err != nil {
-			return nil, err
-		}
-		
 		filter, err := i.evalExpression(where)
 		if err != nil {
 			return nil, err
@@ -331,24 +334,9 @@ func (i *interpreter) whereClause(iters []iteration, where model.IExpression, le
 		if filter.GolangValue() == true {
 			filteredIters = append(filteredIters, iter)
 		}
+		i.refs.ExitScope()
 	}
 	return filteredIters, nil
-}
-
-// evaluateLetClauses evaluates let clauses for the current iteration
-func (i *interpreter) evaluateLetClauses(letClauses []*model.LetClause) error {
-	for _, letClause := range letClauses {
-		obj, err := i.evalExpression(letClause.Expression)
-		if err != nil {
-			return err
-		}
-		
-		// Update the let variable with the current iteration's value
-		if err := i.refs.UpdateAlias(letClause.Identifier, obj); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (i *interpreter) aggregateClause(iters []iteration, aggregateClause *model.AggregateClause) ([]result.Value, error) {
@@ -366,59 +354,51 @@ func (i *interpreter) aggregateClause(iters []iteration, aggregateClause *model.
 		return nil, err
 	}
 
-	// Register the aggregate identifier in the query scope
-	if err := i.refs.Alias(aggregateClause.Identifier, aggregateObj); err != nil {
-		return nil, err
-	}
-
 	for _, iter := range filteredIters {
-		for _, alias := range iter {
-			if err := i.refs.UpdateAlias(alias.alias, alias.obj); err != nil {
-				// If UpdateAlias fails, the alias doesn't exist yet, so create it
-				if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
-					return nil, err
-				}
-			}
+		i.refs.EnterScope()
+
+		if err := i.refs.Alias(aggregateClause.Identifier, aggregateObj); err != nil {
+			i.refs.ExitScope()
+			return nil, err
 		}
 
-		if err := i.refs.UpdateAlias(aggregateClause.Identifier, aggregateObj); err != nil {
-			return nil, err
+		for _, alias := range iter {
+			if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
+				i.refs.ExitScope()
+				return nil, err
+			}
 		}
 
 		aggregateObj, err = i.evalExpression(aggregateClause.Expression)
 		if err != nil {
+			i.refs.ExitScope()
 			return nil, err
 		}
+
+		i.refs.ExitScope()
 	}
 	return []result.Value{aggregateObj}, nil
 }
 
-func (i *interpreter) returnClause(iters []iteration, returnClause *model.ReturnClause, letClauses []*model.LetClause) ([]result.Value, error) {
+func (i *interpreter) returnClause(iters []iteration, returnClause *model.ReturnClause) ([]result.Value, error) {
 	returnObjs := make([]result.Value, 0, len(iters))
 	for _, iter := range iters {
+		i.refs.EnterScope()
 		for _, alias := range iter {
-			if err := i.refs.UpdateAlias(alias.alias, alias.obj); err != nil {
-				// If UpdateAlias fails, the alias doesn't exist yet, so create it
-				if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
-					return nil, err
-				}
+			if err := i.refs.Alias(alias.alias, alias.obj); err != nil {
+				return nil, err
 			}
 		}
-
-		if err := i.evaluateLetClauses(letClauses); err != nil {
-			return nil, err
-		}
-
 		retObj, err := i.evalExpression(returnClause.Expression)
 		if err != nil {
 			return nil, err
 		}
-
 		if returnClause.Distinct {
 			returnObjs = appendIfDistinct(returnObjs, retObj)
 		} else {
 			returnObjs = append(returnObjs, retObj)
 		}
+		i.refs.ExitScope()
 	}
 	return returnObjs, nil
 }
@@ -566,7 +546,7 @@ func (i *interpreter) getSortValue(it model.ISortByItem, v result.Value) (result
 	if converted, err := i.dateTimeOrError(rv); err == nil {
 		return converted, nil
 	}
-	
+
 	// Return the original value for non-DateTime types (Integer, String, etc.)
 	return rv, nil
 }
@@ -585,7 +565,7 @@ func (i *interpreter) sortByColumnOrExpression(objs []result.Value, sbis []model
 				sortErr = err
 				return 0 // Return 0 to indicate equal, which preserves original order
 			}
-			
+
 			switch ap.RuntimeType() {
 			case types.DateTime:
 				// In the future when we have an implementation of dateTime comparison without precision we should swap to using that.
