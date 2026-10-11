@@ -239,9 +239,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"Union",
 			},
 			NamesExcludes: []string{
-				"TestCollapseNull",
-				"DateTimeCollapse2",
-				"TimeCollapse2",
 				// TODO: b/342061715 - unsupported operators.
 				// Note: overlaps before and after are not supported. but these tests are missing the
 				// before/after keyword for Date/Time test cases so they are not excluded.
@@ -311,6 +308,7 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"TestOnOrBeforeDecimalFalse",
 				"TestOnOrBeforeQuantityTrue",
 				// TODO: b/342064453 - Ambiguous match.
+				"TestCollapseNull",
 				"TestEqualNull",
 				"TestInNullBoundaries",
 			},

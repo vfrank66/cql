@@ -137,8 +137,8 @@ func TestCollapse(t *testing.T) {
 			want: newOrFatal(t, result.List{
 				Value: []result.Value{
 					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), Precision: model.DAY}),
-						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 25, 0, 0, 0, 0, time.UTC), Precision: model.DAY}),
+						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 25, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
 						LowInclusive:  true,
 						HighInclusive: true,
 						StaticType:    &types.Interval{PointType: types.Date},
@@ -153,8 +153,8 @@ func TestCollapse(t *testing.T) {
 			want: newOrFatal(t, result.List{
 				Value: []result.Value{
 					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), Precision: model.DAY}),
-						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 25, 0, 0, 0, 0, time.UTC), Precision: model.DAY}),
+						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 25, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
 						LowInclusive:  true,
 						HighInclusive: true,
 						StaticType:    &types.Interval{PointType: types.Date},
@@ -164,8 +164,13 @@ func TestCollapse(t *testing.T) {
 			}),
 		},
 		{
-			name: "Collapse empty list",
+			name: "Collapse null list",
 			cql:  `collapse (null as List<Interval<Date>>)`,
+			want: newOrFatal(t, nil),
+		},
+		{
+			name: "Collapse empty list",
+			cql:  `collapse List<Interval<Date>>{}`,
 			want: newOrFatal(t, result.List{
 				Value:      []result.Value{},
 				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Date}},
@@ -181,6 +186,476 @@ func TestCollapse(t *testing.T) {
 						High:          newOrFatal(t, int32(8)),
 						LowInclusive:  true,
 						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse single interval",
+			cql:  `collapse {Interval[1, 5]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(5)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse excludes null intervals",
+			cql:  `collapse {Interval[1, 5], null, Interval[3, 8]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(8)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse overlapping Decimal intervals with small precision difference",
+			cql:  `collapse {Interval[4.0, 6.0], Interval[6.00000001, 8.0]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, 4.0),
+						High:          newOrFatal(t, 8.0),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Decimal},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Decimal}},
+			}),
+		},
+		{
+			name: "Collapse adjacent Decimal intervals",
+			cql:  `collapse {Interval[1.0, 3.0], Interval[3.0, 5.0]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, 1.0),
+						High:          newOrFatal(t, 5.0),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Decimal},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Decimal}},
+			}),
+		},
+		{
+			name: "Collapse non-overlapping Decimal intervals",
+			cql:  `collapse {Interval[1.0, 2.0], Interval[4.0, 5.0]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, 1.0),
+						High:          newOrFatal(t, 2.0),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Decimal},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, 4.0),
+						High:          newOrFatal(t, 5.0),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Decimal},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Decimal}},
+			}),
+		},
+		{
+			name: "Collapse multiple overlapping Integer intervals",
+			cql:  `collapse {Interval[1, 5], Interval[3, 7], Interval[12, 19], Interval[7, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(12)),
+						High:          newOrFatal(t, int32(19)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse multiple adjacent Integer intervals",
+			cql:  `collapse {Interval[1, 2], Interval[3, 7], Interval[10, 19], Interval[7, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(19)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse multiple Quantity intervals",
+			cql:  `collapse {Interval[1'g', 5'g'], Interval[3'g', 7'g'], Interval[12'g', 19'g'], Interval[7'g', 10'g']}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.Quantity{Value: 1, Unit: "g"}),
+						High:          newOrFatal(t, result.Quantity{Value: 10, Unit: "g"}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Quantity},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.Quantity{Value: 12, Unit: "g"}),
+						High:          newOrFatal(t, result.Quantity{Value: 19, Unit: "g"}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Quantity},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Quantity}},
+			}),
+		},
+		{
+			name: "Two overlapping intervals",
+			cql:  `collapse {Interval[1, 5], Interval[3, 7]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(7)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Two adjacent intervals",
+			cql:  `collapse {Interval[1, 5], Interval[6, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Two touching intervals",
+			cql:  `collapse {Interval[1, 5], Interval[5, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Two non-overlapping intervals",
+			cql:  `collapse {Interval[1, 5], Interval[8, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(5)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(8)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Three intervals - step by step",
+			cql:  `collapse {Interval[1, 5], Interval[3, 7], Interval[7, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse keeps closed Integer intervals with a gap",
+			cql:  `collapse {Interval[1, 4], Interval[6, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(4)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(6)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse keeps open Integer intervals that do not meet",
+			cql:  `collapse {Interval[1, 5), Interval(5, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(5)),
+						LowInclusive:  true,
+						HighInclusive: false,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(5)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  false,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse merges open Integer intervals that meet",
+			cql:  `collapse {Interval[1, 5), Interval[5, 10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse keeps open boundaries of merged intervals",
+			cql:  `collapse {Interval(1, 5), Interval(3, 8)}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(8)),
+						LowInclusive:  false,
+						HighInclusive: false,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse keeps closed Date intervals with a gap",
+			cql:  `collapse {Interval[@2020-01-01, @2020-01-15], Interval[@2020-01-17, @2020-01-25]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 15, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Date},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 17, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 25, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Date},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Date}},
+			}),
+		},
+		{
+			name: "Collapse keeps open Date intervals that do not meet",
+			cql:  `collapse {Interval[@2020-01-01, @2020-01-15), Interval(@2020-01-15, @2020-01-25]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 15, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						LowInclusive:  true,
+						HighInclusive: false,
+						StaticType:    &types.Interval{PointType: types.Date},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.Date{Date: time.Date(2020, 1, 15, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						High:          newOrFatal(t, result.Date{Date: time.Date(2020, 1, 25, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+						LowInclusive:  false,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Date},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Date}},
+			}),
+		},
+		{
+			name: "Collapse keeps open Decimal intervals that do not meet",
+			cql:  `collapse {Interval[1.0, 2.0), Interval(2.0, 3.0]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, 1.0),
+						High:          newOrFatal(t, 2.0),
+						LowInclusive:  true,
+						HighInclusive: false,
+						StaticType:    &types.Interval{PointType: types.Decimal},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, 2.0),
+						High:          newOrFatal(t, 3.0),
+						LowInclusive:  false,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Decimal},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Decimal}},
+			}),
+		},
+		{
+			name: "Collapse closed null low contains the other interval",
+			cql:  `collapse {Interval[null, 5], Interval[1, 2]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, nil),
+						High:          newOrFatal(t, int32(5)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse open null low cannot prove an overlap",
+			cql:  `collapse {Interval(null, 5], Interval[1, 2]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, nil),
+						High:          newOrFatal(t, int32(5)),
+						LowInclusive:  false,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, int32(2)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse closed null low merges an overlapping interval",
+			cql:  `collapse {Interval[null, 5], Interval[4, 6]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, nil),
+						High:          newOrFatal(t, int32(6)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse open null low merges an interval that contains its end",
+			cql:  `collapse {Interval(null, 5], Interval[4, 6]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, nil),
+						High:          newOrFatal(t, int32(6)),
+						LowInclusive:  false,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Integer},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
+			}),
+		},
+		{
+			name: "Collapse open null high gives an unknown end",
+			cql:  `collapse {Interval[1, 3], Interval[2, null)}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int32(1)),
+						High:          newOrFatal(t, nil),
+						LowInclusive:  true,
+						HighInclusive: false,
 						StaticType:    &types.Interval{PointType: types.Integer},
 					}),
 				},
@@ -206,7 +681,6 @@ func TestCollapse(t *testing.T) {
 		})
 	}
 }
-
 
 func TestStart(t *testing.T) {
 	tests := []struct {
@@ -2045,311 +2519,6 @@ func TestComparison_Error(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.wantEvalErrContains) {
 				t.Errorf("Unexpected evaluation error contents. got (%v), want contains (%v)", err.Error(), tc.wantEvalErrContains)
-			}
-		})
-	}
-}
-
-func TestCollapseDecimalPrecision(t *testing.T) {
-	tests := []struct {
-		name string
-		cql  string
-		want result.Value
-	}{
-		{
-			name: "Collapse overlapping Decimal intervals with small precision difference",
-			cql:  `collapse {Interval[4.0, 6.0], Interval[6.00000001, 8.0]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, 4.0),
-						High:          newOrFatal(t, 8.0),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Decimal},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Decimal}},
-			}),
-		},
-		{
-			name: "Collapse adjacent Decimal intervals",
-			cql:  `collapse {Interval[1.0, 3.0], Interval[3.0, 5.0]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, 1.0),
-						High:          newOrFatal(t, 5.0),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Decimal},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Decimal}},
-			}),
-		},
-		{
-			name: "Collapse non-overlapping Decimal intervals",
-			cql:  `collapse {Interval[1.0, 2.0], Interval[4.0, 5.0]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, 1.0),
-						High:          newOrFatal(t, 2.0),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Decimal},
-					}),
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, 4.0),
-						High:          newOrFatal(t, 5.0),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Decimal},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Decimal}},
-			}),
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := newFHIRParser(t)
-			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
-			if err != nil {
-				t.Fatalf("Parse returned unexpected error: %v", err)
-			}
-			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
-			if err != nil {
-				t.Fatalf("Eval returned unexpected error: %v", err)
-			}
-			if diff := cmp.Diff(tc.want, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
-				t.Errorf("Evaluate diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestCollapseMultiIntervalMerging(t *testing.T) {
-	tests := []struct {
-		name string
-		cql  string
-		want result.Value
-	}{
-		{
-			name: "Collapse multiple overlapping Integer intervals",
-			cql:  `collapse {Interval[1, 5], Interval[3, 7], Interval[12, 19], Interval[7, 10]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(10)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(12)),
-						High:          newOrFatal(t, int32(19)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-		{
-			name: "Collapse multiple adjacent Integer intervals",
-			cql:  `collapse {Interval[1, 2], Interval[3, 7], Interval[10, 19], Interval[7, 10]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(19)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-		{
-			name: "Collapse multiple Quantity intervals",
-			cql:  `collapse {Interval[1'g', 5'g'], Interval[3'g', 7'g'], Interval[12'g', 19'g'], Interval[7'g', 10'g']}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, result.Quantity{Value: 1, Unit: "g"}),
-						High:          newOrFatal(t, result.Quantity{Value: 10, Unit: "g"}),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Quantity},
-					}),
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, result.Quantity{Value: 12, Unit: "g"}),
-						High:          newOrFatal(t, result.Quantity{Value: 19, Unit: "g"}),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Quantity},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Quantity}},
-			}),
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := newFHIRParser(t)
-			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
-			if err != nil {
-				t.Fatalf("Parse returned unexpected error: %v", err)
-			}
-			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
-			if err != nil {
-				t.Fatalf("Eval returned unexpected error: %v", err)
-			}
-			if diff := cmp.Diff(tc.want, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
-				t.Errorf("Evaluate diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestCollapseSimpleMerging(t *testing.T) {
-	tests := []struct {
-		name string
-		cql  string
-		want result.Value
-	}{
-		{
-			name: "Two overlapping intervals",
-			cql:  `collapse {Interval[1, 5], Interval[3, 7]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(7)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-		{
-			name: "Two adjacent intervals",
-			cql:  `collapse {Interval[1, 5], Interval[6, 10]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(10)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-		{
-			name: "Two touching intervals",
-			cql:  `collapse {Interval[1, 5], Interval[5, 10]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(10)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-		{
-			name: "Two non-overlapping intervals",
-			cql:  `collapse {Interval[1, 5], Interval[8, 10]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(5)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(8)),
-						High:          newOrFatal(t, int32(10)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-		{
-			name: "Three intervals - step by step",
-			cql:  `collapse {Interval[1, 5], Interval[3, 7], Interval[7, 10]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(10)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-		{
-			name: "Original failing case - sorted order",
-			cql:  `collapse {Interval[1, 5], Interval[3, 7], Interval[7, 10], Interval[12, 19]}`,
-			want: newOrFatal(t, result.List{
-				Value: []result.Value{
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(1)),
-						High:          newOrFatal(t, int32(10)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-					newOrFatal(t, result.Interval{
-						Low:           newOrFatal(t, int32(12)),
-						High:          newOrFatal(t, int32(19)),
-						LowInclusive:  true,
-						HighInclusive: true,
-						StaticType:    &types.Interval{PointType: types.Integer},
-					}),
-				},
-				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
-			}),
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := newFHIRParser(t)
-			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
-			if err != nil {
-				t.Fatalf("Parse returned unexpected error: %v", err)
-			}
-			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
-			if err != nil {
-				t.Fatalf("Eval returned unexpected error: %v", err)
-			}
-			if diff := cmp.Diff(tc.want, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
-				t.Errorf("Evaluate diff (-want +got):\n%s", diff)
 			}
 		})
 	}

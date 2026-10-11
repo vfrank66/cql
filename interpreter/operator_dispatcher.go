@@ -1474,51 +1474,51 @@ func (i *interpreter) naryOverloads(m model.INaryExpression) ([]convert.Overload
 		return []convert.Overload[evalNarySignature]{
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Date}}},
-				Result:   i.evalCollapseIntervalDate,
+				Result:   i.evalCollapseDateTime,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Date}}, types.Quantity},
-				Result:   i.evalCollapseIntervalDate,
+				Result:   i.evalCollapseDateTime,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.DateTime}}},
-				Result:   i.evalCollapseIntervalDateTime,
+				Result:   i.evalCollapseDateTime,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.DateTime}}, types.Quantity},
-				Result:   i.evalCollapseIntervalDateTime,
+				Result:   i.evalCollapseDateTime,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Time}}},
-				Result:   i.evalCollapseIntervalTime,
+				Result:   i.evalCollapseDateTime,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Time}}, types.Quantity},
-				Result:   i.evalCollapseIntervalTime,
+				Result:   i.evalCollapseDateTime,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Integer}}},
-				Result:   i.evalCollapseIntervalInteger,
+				Result:   i.evalCollapseInteger,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Integer}}, types.Quantity},
-				Result:   i.evalCollapseIntervalInteger,
+				Result:   i.evalCollapseInteger,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Decimal}}},
-				Result:   i.evalCollapseIntervalDecimal,
+				Result:   i.evalCollapseDecimal,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Decimal}}, types.Quantity},
-				Result:   i.evalCollapseIntervalDecimal,
+				Result:   i.evalCollapseDecimal,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Quantity}}},
-				Result:   i.evalCollapseIntervalQuantity,
+				Result:   i.evalCollapseQuantity,
 			},
 			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Quantity}}, types.Quantity},
-				Result:   i.evalCollapseIntervalQuantity,
+				Result:   i.evalCollapseQuantity,
 			},
 		}, nil
 	default:
