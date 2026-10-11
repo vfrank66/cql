@@ -15,6 +15,7 @@
 package interpreter
 
 import (
+	"cmp"
 	"fmt"
 	"time"
 
@@ -642,20 +643,18 @@ func evalWidthInterval(m model.IUnaryExpression, intervalObj result.Value) (resu
 	return result.Value{}, fmt.Errorf("internal error - unsupported point type in evalWidthInterval: %v", start.RuntimeType())
 }
 
-
-// ProperlyIncludedIn(left Interval<Date>, right Interval<Date>) Boolean
-// ProperlyIncludedIn(left Interval<DateTime>, right Interval<DateTime>) Boolean
+// ProperlyIncludedIn(left Interval<T>, right Interval<T>) Boolean
 // https://cql.hl7.org/09-b-cqlreference.html#properly-included-in-1
-func (i *interpreter) evalProperlyIncludedInInterval(m model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {
+func (i *interpreter) evalProperlyIncludedInInterval(b model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {
 	if result.IsNull(lObj) || result.IsNull(rObj) {
 		return result.New(nil)
 	}
+	if m, ok := b.(*model.ProperlyIncludedIn); ok && m.Precision != model.UNSETDATETIMEPRECISION {
+		return result.Value{}, fmt.Errorf("internal error - properly included in does not yet support precision")
+	}
 
-	// ProperlyIncludedIn(A, B) = IncludedIn(A, B) and A != B
-	// First check if left interval is included in right interval
-	// We can use the existing interval inclusion logic by checking if all points of left are in right
-
-	// Get interval bounds
+	// start and end handle null inclusivity and open boundaries, so every bound below is closed and
+	// a null bound is unknown.
 	leftStart, leftEnd, err := startAndEnd(lObj, &i.evaluationTimestamp)
 	if err != nil {
 		return result.Value{}, err
@@ -665,256 +664,87 @@ func (i *interpreter) evalProperlyIncludedInInterval(m model.IBinaryExpression, 
 		return result.Value{}, err
 	}
 
-	// Check if left interval is included in right interval
-	// This means: rightStart <= leftStart AND leftEnd <= rightEnd
-	var includedIn bool
-
-	// Handle null bounds
-	if result.IsNull(leftStart) || result.IsNull(leftEnd) || result.IsNull(rightStart) || result.IsNull(rightEnd) {
-		return result.New(nil)
-	}
-
-	// Compare based on the point type
-	leftInterval, err := result.ToInterval(lObj)
+	startComp, err := compareIntervalPoints(leftStart, rightStart)
 	if err != nil {
 		return result.Value{}, err
 	}
-	rightInterval, err := result.ToInterval(rObj)
+	endComp, err := compareIntervalPoints(leftEnd, rightEnd)
 	if err != nil {
 		return result.Value{}, err
 	}
-
-	// Check if left is included in right
-	if leftInterval.StaticType.PointType == types.Date || leftInterval.StaticType.PointType == types.DateTime {
-		// For temporal types, use DateTime comparison
-		leftStartDT, err := result.ToDateTime(leftStart)
-		if err != nil {
-			return result.Value{}, err
-		}
-		leftEndDT, err := result.ToDateTime(leftEnd)
-		if err != nil {
-			return result.Value{}, err
-		}
-		rightStartDT, err := result.ToDateTime(rightStart)
-		if err != nil {
-			return result.Value{}, err
-		}
-		rightEndDT, err := result.ToDateTime(rightEnd)
-		if err != nil {
-			return result.Value{}, err
-		}
-
-		// Check: rightStart <= leftStart AND leftEnd <= rightEnd
-		startComp, err := compareDateTimeWithPrecision(rightStartDT, leftStartDT, "")
-		if err != nil {
-			return result.Value{}, err
-		}
-		endComp, err := compareDateTimeWithPrecision(leftEndDT, rightEndDT, "")
-		if err != nil {
-			return result.Value{}, err
-		}
-
-		if startComp == insufficientPrecision || endComp == insufficientPrecision {
-			return result.New(nil)
-		}
-
-		includedIn = (startComp == leftBeforeRight || startComp == leftEqualRight) &&
-			(endComp == leftBeforeRight || endComp == leftEqualRight)
-	} else {
-		// For numeric types, use type-specific comparison
-		if leftInterval.StaticType.PointType == types.Integer {
-			leftStartInt, err := result.ToInt32(leftStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			leftEndInt, err := result.ToInt32(leftEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightStartInt, err := result.ToInt32(rightStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightEndInt, err := result.ToInt32(rightEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-
-			includedIn = rightStartInt <= leftStartInt && leftEndInt <= rightEndInt
-		} else if leftInterval.StaticType.PointType == types.Long {
-			leftStartLong, err := result.ToInt64(leftStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			leftEndLong, err := result.ToInt64(leftEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightStartLong, err := result.ToInt64(rightStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightEndLong, err := result.ToInt64(rightEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-
-			includedIn = rightStartLong <= leftStartLong && leftEndLong <= rightEndLong
-		} else if leftInterval.StaticType.PointType == types.Decimal {
-			leftStartFloat, err := result.ToFloat64(leftStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			leftEndFloat, err := result.ToFloat64(leftEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightStartFloat, err := result.ToFloat64(rightStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightEndFloat, err := result.ToFloat64(rightEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-
-			includedIn = rightStartFloat <= leftStartFloat && leftEndFloat <= rightEndFloat
-		} else if leftInterval.StaticType.PointType == types.Quantity {
-			leftStartQty, err := result.ToQuantity(leftStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			leftEndQty, err := result.ToQuantity(leftEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightStartQty, err := result.ToQuantity(rightStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightEndQty, err := result.ToQuantity(rightEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-
-			// Check units match
-			if leftStartQty.Unit != rightStartQty.Unit || leftEndQty.Unit != rightEndQty.Unit {
-				return result.Value{}, fmt.Errorf("ProperlyIncludedIn operator received Quantities with differing unit values")
-			}
-
-			includedIn = rightStartQty.Value <= leftStartQty.Value && leftEndQty.Value <= rightEndQty.Value
-		} else if leftInterval.StaticType.PointType == types.Time {
-			// For Time types, we can't use float64 conversion, so we'll use a different approach
-			// Compare times by converting to a comparable format
-			leftStartTime, err := result.ToTime(leftStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			leftEndTime, err := result.ToTime(leftEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightStartTime, err := result.ToTime(rightStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightEndTime, err := result.ToTime(rightEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-
-			// Compare times using their internal representation
-			rightStartNanos := rightStartTime.Date.UnixNano()
-			leftStartNanos := leftStartTime.Date.UnixNano()
-			leftEndNanos := leftEndTime.Date.UnixNano()
-			rightEndNanos := rightEndTime.Date.UnixNano()
-
-			includedIn = rightStartNanos <= leftStartNanos && leftEndNanos <= rightEndNanos
-		} else {
-			// For other types, try float conversion as fallback
-			leftStartFloat, err := result.ToFloat64(leftStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			leftEndFloat, err := result.ToFloat64(leftEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightStartFloat, err := result.ToFloat64(rightStart)
-			if err != nil {
-				return result.Value{}, err
-			}
-			rightEndFloat, err := result.ToFloat64(rightEnd)
-			if err != nil {
-				return result.Value{}, err
-			}
-
-			includedIn = rightStartFloat <= leftStartFloat && leftEndFloat <= rightEndFloat
-		}
-	}
-
-	if !includedIn {
+	if startComp == leftBeforeRight || endComp == leftAfterRight {
 		return result.New(false)
 	}
 
-	// Now check if intervals are equal
-	// Two intervals are equal if they have the same bounds and inclusivity
-	leftStartEqual := false
-	leftEndEqual := false
-	rightStartEqual := false
-	rightEndEqual := false
-
-	if leftInterval.StaticType.PointType == types.Date || leftInterval.StaticType.PointType == types.DateTime {
-		leftStartDT, _ := result.ToDateTime(leftStart)
-		leftEndDT, _ := result.ToDateTime(leftEnd)
-		rightStartDT, _ := result.ToDateTime(rightStart)
-		rightEndDT, _ := result.ToDateTime(rightEnd)
-
-		startComp, err := compareDateTimeWithPrecision(leftStartDT, rightStartDT, "")
+	// An unknown start is at most the left end and an unknown end is at least the left start, so
+	// Interval(null, 1] properly included in Interval[5, null) is still false.
+	if result.IsNull(leftStart) {
+		c, err := compareIntervalPoints(leftEnd, rightStart)
 		if err != nil {
 			return result.Value{}, err
 		}
-		endComp, err := compareDateTimeWithPrecision(leftEndDT, rightEndDT, "")
+		if c == leftBeforeRight {
+			return result.New(false)
+		}
+	}
+	if result.IsNull(leftEnd) {
+		c, err := compareIntervalPoints(leftStart, rightEnd)
 		if err != nil {
 			return result.Value{}, err
 		}
-
-		leftStartEqual = (startComp == leftEqualRight)
-		leftEndEqual = (endComp == leftEqualRight)
-	} else {
-		// For numeric types, handle different types properly
-		if leftInterval.StaticType.PointType == types.Integer {
-			leftStartInt, _ := result.ToInt32(leftStart)
-			leftEndInt, _ := result.ToInt32(leftEnd)
-			rightStartInt, _ := result.ToInt32(rightStart)
-			rightEndInt, _ := result.ToInt32(rightEnd)
-
-			leftStartEqual = (leftStartInt == rightStartInt)
-			leftEndEqual = (leftEndInt == rightEndInt)
-		} else if leftInterval.StaticType.PointType == types.Long {
-			leftStartLong, _ := result.ToInt64(leftStart)
-			leftEndLong, _ := result.ToInt64(leftEnd)
-			rightStartLong, _ := result.ToInt64(rightStart)
-			rightEndLong, _ := result.ToInt64(rightEnd)
-
-			leftStartEqual = (leftStartLong == rightStartLong)
-			leftEndEqual = (leftEndLong == rightEndLong)
-		} else {
-			// For Decimal, Quantity, and other types, try float conversion
-			leftStartFloat, _ := result.ToFloat64(leftStart)
-			leftEndFloat, _ := result.ToFloat64(leftEnd)
-			rightStartFloat, _ := result.ToFloat64(rightStart)
-			rightEndFloat, _ := result.ToFloat64(rightEnd)
-
-			leftStartEqual = (leftStartFloat == rightStartFloat)
-			leftEndEqual = (leftEndFloat == rightEndFloat)
+		if c == leftAfterRight {
+			return result.New(false)
 		}
 	}
 
-	rightStartEqual = (leftInterval.LowInclusive == rightInterval.LowInclusive)
-	rightEndEqual = (leftInterval.HighInclusive == rightInterval.HighInclusive)
+	startKnown := startComp == leftEqualRight || startComp == leftAfterRight
+	endKnown := endComp == leftEqualRight || endComp == leftBeforeRight
+	if !startKnown || !endKnown {
+		return result.New(nil)
+	}
+	return result.New(startComp == leftAfterRight || endComp == leftBeforeRight)
+}
 
-	isEqual := leftStartEqual && leftEndEqual && rightStartEqual && rightEndEqual
+// compareIntervalPoints compares two interval points of the same point type. It returns
+// comparedToNull if either point is null or if Quantity units cannot be converted.
+func compareIntervalPoints(l, r result.Value) (comparison, error) {
+	if result.IsNull(l) || result.IsNull(r) {
+		return comparedToNull, nil
+	}
+	switch l.RuntimeType() {
+	case types.Integer:
+		return compareValues(l, r, result.ToInt32)
+	case types.Long:
+		return compareValues(l, r, result.ToInt64)
+	case types.Decimal:
+		return compareValues(l, r, result.ToFloat64)
+	case types.Quantity:
+		lq, rq, err := applyToValues(l, r, result.ToQuantity)
+		if err != nil {
+			return unsetComparison, err
+		}
+		if lq.Unit == rq.Unit {
+			return toComparison(cmp.Compare(lq.Value, rq.Value)), nil
+		}
+		converted, err := ucum.ConvertUnit(lq.Value, string(lq.Unit), string(rq.Unit))
+		if err != nil {
+			return comparedToNull, nil
+		}
+		return toComparison(cmp.Compare(converted, rq.Value)), nil
+	case types.Date, types.DateTime, types.Time:
+		ldt, rdt, err := applyToValues(l, r, result.ToDateTime)
+		if err != nil {
+			return unsetComparison, err
+		}
+		return compareDateTime(ldt, rdt)
+	}
+	return unsetComparison, fmt.Errorf("internal error - unsupported point type in compareIntervalPoints: %v", l.RuntimeType())
+}
 
-	return result.New(includedIn && !isEqual)
+func compareValues[t cmp.Ordered](l, r result.Value, fn func(result.Value) (t, error)) (comparison, error) {
+	lv, rv, err := applyToValues(l, r, fn)
+	if err != nil {
+		return unsetComparison, err
+	}
+	return toComparison(cmp.Compare(lv, rv)), nil
 }

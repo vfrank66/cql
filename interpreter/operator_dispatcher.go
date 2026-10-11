@@ -1271,10 +1271,6 @@ func (i *interpreter) binaryOverloads(m model.IBinaryExpression) ([]convert.Over
 				Result:   i.evalProperlyIncludedInInterval,
 			},
 			{
-				Operands: []types.IType{&types.Interval{PointType: types.String}, &types.Interval{PointType: types.String}},
-				Result:   i.evalProperlyIncludedInInterval,
-			},
-			{
 				Operands: []types.IType{&types.Interval{PointType: types.Time}, &types.Interval{PointType: types.Time}},
 				Result:   i.evalProperlyIncludedInInterval,
 			},

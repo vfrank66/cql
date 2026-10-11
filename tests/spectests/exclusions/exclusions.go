@@ -239,9 +239,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"Union",
 			},
 			NamesExcludes: []string{
-				"IntegerIntervalProperlyIncludedInNullBoundaries",
-				"QuantityIntervalProperlyIncludedInTrue",
-				"TimeProperlyIncludedInTrue",
 				// TODO: b/342061715 - unsupported operators.
 				// Note: overlaps before and after are not supported. but these tests are missing the
 				// before/after keyword for Date/Time test cases so they are not excluded.
@@ -313,6 +310,7 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				// TODO: b/342064453 - Ambiguous match.
 				"TestEqualNull",
 				"TestInNullBoundaries",
+				"IntegerIntervalProperlyIncludedInNullBoundaries",
 			},
 		},
 		"CqlListOperatorsTest.xml": {

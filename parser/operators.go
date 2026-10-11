@@ -1877,7 +1877,6 @@ func (p *Parser) loadSystemOperators() error {
 				{&types.Interval{PointType: types.Long}, &types.Interval{PointType: types.Long}},
 				{&types.Interval{PointType: types.Decimal}, &types.Interval{PointType: types.Decimal}},
 				{&types.Interval{PointType: types.Quantity}, &types.Interval{PointType: types.Quantity}},
-				{&types.Interval{PointType: types.String}, &types.Interval{PointType: types.String}},
 				{&types.Interval{PointType: types.Time}, &types.Interval{PointType: types.Time}},
 			},
 			model: func() model.IExpression {

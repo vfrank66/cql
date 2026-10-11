@@ -171,6 +171,71 @@ func TestProperlyIncludedInInterval(t *testing.T) {
 			cql:  `Interval[@2020-01-01, @2020-01-15] properly included in (null as Interval<Date>)`,
 			want: newOrFatal(t, nil),
 		},
+		{
+			name: "Unknown left start ends before right start",
+			cql:  `Interval(null, 1] properly included in Interval[5, null)`,
+			want: newOrFatal(t, false),
+		},
+		{
+			name: "Unknown left end starts after right end",
+			cql:  `Interval[5, null) properly included in Interval(null, 1]`,
+			want: newOrFatal(t, false),
+		},
+		{
+			name: "Unknown left start inside right interval",
+			cql:  `Interval(null, 5] properly included in Interval[1, 10]`,
+			want: newOrFatal(t, nil),
+		},
+		{
+			name: "Unknown right start",
+			cql:  `Interval[2, 5] properly included in Interval(null, 10]`,
+			want: newOrFatal(t, nil),
+		},
+		{
+			name: "Closed null right bounds",
+			cql:  `Interval[2, 5] properly included in Interval[null as Integer, null as Integer]`,
+			want: newOrFatal(t, true),
+		},
+		{
+			name: "Same Integer interval with different boundary inclusivity",
+			cql:  `Interval[1, 5] properly included in Interval[1, 6)`,
+			want: newOrFatal(t, false),
+		},
+		{
+			name: "Properly included Long intervals",
+			cql:  `Interval[2L, 4L] properly included in Interval[1L, 5L]`,
+			want: newOrFatal(t, true),
+		},
+		{
+			name: "Properly included Decimal intervals with open bounds",
+			cql:  `Interval(1.0, 2.0) properly included in Interval[1.0, 2.0]`,
+			want: newOrFatal(t, true),
+		},
+		{
+			name: "Properly included Time intervals",
+			cql:  `Interval[@T10:00, @T11:00] properly included in Interval[@T09:00, @T12:00]`,
+			want: newOrFatal(t, true),
+		},
+		{
+			name: "Date intervals with insufficient precision",
+			cql:  `Interval[@2020, @2021] properly included in Interval[@2020-01-01, @2022-01-01]`,
+			want: newOrFatal(t, nil),
+		},
+		{
+			name: "Quantity intervals with convertible units",
+			cql:  `Interval[500 'g', 900 'g'] properly included in Interval[0.1 'kg', 1 'kg']`,
+			want: newOrFatal(t, true),
+		},
+		{
+			name: "Same Quantity interval in different units",
+			cql:  `Interval[1 'kg', 2 'kg'] properly included in Interval[1000 'g', 2000 'g']`,
+			want: newOrFatal(t, false),
+		},
+		{
+			name: "Quantity intervals with incompatible units",
+			cql:  `Interval[1 'g', 2 'g'] properly included in Interval[1 'm', 5 'm']`,
+			want: newOrFatal(t, nil),
+		},
 	}
 
 	for _, tc := range tests {
