@@ -1960,9 +1960,7 @@ func (p *Parser) loadSystemOperators() error {
 				}
 			},
 		},
-		// Fluent functions are defined as lowercase, not sure
-		// the best way to handle this for all the fluent functions
-		// but this is for the spectests which is lowercase according to the CQL spec
+		// Lowercase FHIRPath forms, https://cql.hl7.org/16-i-fhirpathtranslation.html.
 		{
 			name: "descendants",
 			operands: [][]types.IType{

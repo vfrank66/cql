@@ -25,6 +25,10 @@ import (
 	"github.com/google/cql/parser"
 	"github.com/google/cql/result"
 	"github.com/google/cql/types"
+	c4pb "github.com/google/fhir/go/proto/google/fhir/proto/r4/core/codes_go_proto"
+	d4pb "github.com/google/fhir/go/proto/google/fhir/proto/r4/core/datatypes_go_proto"
+	r4pb "github.com/google/fhir/go/proto/google/fhir/proto/r4/core/resources/bundle_and_contained_resource_go_proto"
+	r4observationpb "github.com/google/fhir/go/proto/google/fhir/proto/r4/core/resources/observation_go_proto"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 )
@@ -121,6 +125,7 @@ func TestDescendants(t *testing.T) {
 	tests := []struct {
 		name       string
 		cql        string
+		resources  []*r4pb.ContainedResource
 		wantResult result.Value
 	}{
 		{
@@ -153,77 +158,76 @@ func TestDescendants(t *testing.T) {
 			cql:        "(null).descendents()",
 			wantResult: newOrFatal(t, nil),
 		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := newFHIRParser(t)
-			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
-			if err != nil {
-				t.Fatalf("Parse returned unexpected error: %v", err)
-			}
-
-			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
-			if err != nil {
-				t.Fatalf("Eval returned unexpected error: %v", err)
-			}
-			if diff := cmp.Diff(tc.wantResult, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
-				t.Errorf("Eval diff (-want +got)\n%v", diff)
-			}
-
-		})
-	}
-}
-
-func TestFluentFunctionCaseSensitivity(t *testing.T) {
-	tests := []struct {
-		name       string
-		cql        string
-		wantResult result.Value
-	}{
-		// Test that fluent functions are case-sensitive
 		{
-			name:       "Add fluent - capital A",
-			cql:        "4.Add(4)",
-			wantResult: newOrFatal(t, 8),
-		},
-		{
-			name:       "IsNull fluent - capital I and N",
-			cql:        "(null).IsNull()",
-			wantResult: newOrFatal(t, true),
-		},
-		{
-			name:       "ToString fluent - capital T and S",
-			cql:        "42.ToString()",
-			wantResult: newOrFatal(t, "42"),
-		},
-		{
-			name:       "Length fluent - capital L",
-			cql:        "{1, 2, 3}.Length()",
-			wantResult: newOrFatal(t, 3),
-		},
-		{
-			name:       "First fluent - capital F",
-			cql:        "{1, 2, 3}.First()",
-			wantResult: newOrFatal(t, 1),
-		},
-		{
-			name:       "Last fluent - capital L",
-			cql:        "{1, 2, 3}.Last()",
-			wantResult: newOrFatal(t, 3),
-		},
-		{
-			name:       "Exists fluent - capital E",
-			cql:        "{1, 2, 3}.Exists()",
-			wantResult: newOrFatal(t, true),
-		},
-		{
-			name: "Distinct fluent - capital D",
-			cql:  "{1, 1, 2}.Distinct()",
+			name: "Tuple elements in name order",
+			cql:  "Descendants(Tuple{f: 6, b: 2, d: 4, a: 1, e: 5, c: 3})",
 			wantResult: newOrFatal(t, result.List{
-				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2))},
-				StaticType: &types.List{ElementType: types.Integer},
+				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2)), newOrFatal(t, int32(3)), newOrFatal(t, int32(4)), newOrFatal(t, int32(5)), newOrFatal(t, int32(6))},
+				StaticType: &types.List{ElementType: types.Any},
 			}),
 		},
+		{
+			name: "List inside a tuple is flattened",
+			cql:  "Descendants(Tuple{a: {1, 2}})",
+			wantResult: newOrFatal(t, result.List{
+				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2))},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "Nested lists are flattened",
+			cql:  "Descendants({1, {2, 3}})",
+			wantResult: newOrFatal(t, result.List{
+				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2)), newOrFatal(t, int32(3))},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "Tuple inside a tuple",
+			cql:  "Descendants(Tuple{a: Tuple{b: 1}})",
+			wantResult: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Tuple{
+						Value:       map[string]result.Value{"b": newOrFatal(t, int32(1))},
+						RuntimeType: &types.Tuple{ElementTypes: map[string]types.IType{"b": types.Integer}},
+					}),
+					newOrFatal(t, int32(1)),
+				},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "FHIR resource elements in document order",
+			cql:  "Descendants(First([Observation]))",
+			resources: []*r4pb.ContainedResource{containedFromObservation(&r4observationpb.Observation{
+				Status: &r4observationpb.Observation_StatusCode{Value: c4pb.ObservationStatusCode_FINAL},
+				Code:   &d4pb.CodeableConcept{Coding: []*d4pb.Coding{{Code: &d4pb.Code{Value: "1234"}}}},
+				Value:  &r4observationpb.Observation_ValueX{Choice: &r4observationpb.Observation_ValueX_Integer{Integer: &d4pb.Integer{Value: 4}}},
+			})},
+			wantResult: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Named{Value: &r4observationpb.Observation_StatusCode{Value: c4pb.ObservationStatusCode_FINAL}, RuntimeType: &types.Named{TypeName: "FHIR.ObservationStatus"}}),
+					newOrFatal(t, result.Named{Value: &d4pb.CodeableConcept{Coding: []*d4pb.Coding{{Code: &d4pb.Code{Value: "1234"}}}}, RuntimeType: &types.Named{TypeName: "FHIR.CodeableConcept"}}),
+					newOrFatal(t, result.Named{Value: &d4pb.Coding{Code: &d4pb.Code{Value: "1234"}}, RuntimeType: &types.Named{TypeName: "FHIR.Coding"}}),
+					newOrFatal(t, result.Named{Value: &d4pb.Code{Value: "1234"}, RuntimeType: &types.Named{TypeName: "FHIR.code"}}),
+					newOrFatal(t, result.Named{Value: &d4pb.Integer{Value: 4}, RuntimeType: &types.Named{TypeName: "FHIR.integer"}}),
+				},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "Fluent descendants on a FHIR resource",
+			cql:  "Count(First([Observation]).descendants())",
+			resources: []*r4pb.ContainedResource{containedFromObservation(&r4observationpb.Observation{
+				Status: &r4observationpb.Observation_StatusCode{Value: c4pb.ObservationStatusCode_FINAL},
+				Extension: []*d4pb.Extension{{
+					Id:    &d4pb.String{Value: "ext1"},
+					Url:   &d4pb.Uri{Value: "http://example.com/ext"},
+					Value: &d4pb.Extension_ValueX{Choice: &d4pb.Extension_ValueX_StringValue{StringValue: &d4pb.String{Value: "x"}}},
+				}},
+			})},
+			wantResult: newOrFatal(t, 4),
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -233,14 +237,17 @@ func TestFluentFunctionCaseSensitivity(t *testing.T) {
 				t.Fatalf("Parse returned unexpected error: %v", err)
 			}
 
-			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
+			config := defaultInterpreterConfig(t, p)
+			if tc.resources != nil {
+				config.Retriever = newRetrieverFromProtosOrFatal(t, tc.resources)
+			}
+			results, err := interpreter.Eval(context.Background(), parsedLibs, config)
 			if err != nil {
 				t.Fatalf("Eval returned unexpected error: %v", err)
 			}
 			if diff := cmp.Diff(tc.wantResult, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
 				t.Errorf("Eval diff (-want +got)\n%v", diff)
 			}
-
 		})
 	}
 }

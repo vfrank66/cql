@@ -16,6 +16,7 @@ package interpreter
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/google/cql/model"
 	"github.com/google/cql/result"
@@ -451,72 +452,91 @@ func evalTail(m model.IUnaryExpression, listObj result.Value) (result.Value, err
 }
 
 // Descendants(argument Any) List<Any>
-// Returns all descendant elements of a given element in a hierarchical structure
-// From FHIRPath specification: .descendants(X) === Descendants(X)
-func evalDescendants(m model.IUnaryExpression, operand result.Value) (result.Value, error) {
+// FHIRPath: .descendants() === Descendants(X)
+// Returns every element below the operand as a flat list, in document order.
+func (i *interpreter) evalDescendants(m model.IUnaryExpression, operand result.Value) (result.Value, error) {
 	if result.IsNull(operand) {
 		return result.New(nil)
 	}
-
-	var allDescendants []result.Value
-
-	// Get immediate children of the operand
-	children, err := getElementChildren(operand)
-	if err != nil {
+	descendants := []result.Value{}
+	if err := i.appendDescendants(operand, &descendants); err != nil {
 		return result.Value{}, err
 	}
-
-	// For each child, add it and recursively get its descendants
-	for _, child := range children {
-		allDescendants = append(allDescendants, child)
-
-		// Recursively get descendants of this child
-		childDescendants, err := evalDescendants(m, child)
-		if err != nil {
-			return result.Value{}, err
-		}
-
-		if !result.IsNull(childDescendants) {
-			if list, ok := childDescendants.GolangValue().(result.List); ok {
-				allDescendants = append(allDescendants, list.Value...)
-			}
-		}
-	}
-
 	return result.New(result.List{
-		Value:      allDescendants,
+		Value:      descendants,
 		StaticType: &types.List{ElementType: types.Any},
 	})
 }
 
-// Helper function to get immediate children of an element
-func getElementChildren(element result.Value) ([]result.Value, error) {
-	switch ot := element.GolangValue().(type) {
-	case result.Named:
-		// For FHIR resources, get all property values
-		return getNamedElementChildren(ot)
-	case result.List:
-		// For lists, return all elements
-		return ot.Value, nil
-	case result.Tuple:
-		// For tuples, return all values
-		var children []result.Value
-		for _, value := range ot.Value {
-			children = append(children, value)
-		}
-		return children, nil
-	default:
-		// For primitive types, no children
-		return []result.Value{}, nil
+func (i *interpreter) appendDescendants(v result.Value, descendants *[]result.Value) error {
+	children, err := i.elementChildren(v)
+	if err != nil {
+		return err
 	}
+	for _, child := range children {
+		*descendants = append(*descendants, child)
+		if err := i.appendDescendants(child, descendants); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// Helper function to get children from named elements (FHIR resources)
-func getNamedElementChildren(named result.Named) ([]result.Value, error) {
-	// For now, return empty list for Named types (FHIR resources)
-	// TODO: Implement proper proto message traversal using reflection
-	// to extract all field values as children
-	return []result.Value{}, nil
+// elementChildren returns the direct children of v. Lists are flattened and nulls dropped, so a
+// list value itself is never a child.
+func (i *interpreter) elementChildren(v result.Value) ([]result.Value, error) {
+	var children []result.Value
+	switch ot := v.GolangValue().(type) {
+	case result.List:
+		children = appendFlattened(children, v)
+	case result.Tuple:
+		keys := make([]string, 0, len(ot.Value))
+		for k := range ot.Value {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			children = appendFlattened(children, ot.Value[k])
+		}
+	case result.Named:
+		msg := ot.Value.ProtoReflect()
+		fields := msg.Descriptor().Fields()
+		for idx := 0; idx < fields.Len(); idx++ {
+			fd := fields.Get(idx)
+			if !msg.Has(fd) {
+				continue
+			}
+			property := fd.JSONName()
+			staticType, err := i.modelInfo.PropertyTypeSpecifier(ot.RuntimeType, property)
+			if err != nil {
+				// Proto-only fields (e.g. valueUs on FHIR.dateTime) are not FHIR elements.
+				continue
+			}
+			// System-typed elements are a primitive's own value or Element.id, not FHIR nodes.
+			if _, ok := staticType.(types.System); ok {
+				continue
+			}
+			child, err := i.protoProperty(ot, property, staticType)
+			if err != nil {
+				return nil, err
+			}
+			children = appendFlattened(children, child)
+		}
+	}
+	return children, nil
+}
+
+func appendFlattened(values []result.Value, v result.Value) []result.Value {
+	if result.IsNull(v) {
+		return values
+	}
+	if l, ok := v.GolangValue().(result.List); ok {
+		for _, elem := range l.Value {
+			values = appendFlattened(values, elem)
+		}
+		return values
+	}
+	return append(values, v)
 }
 
 // Take(argument List<T>, number Integer) List<T>

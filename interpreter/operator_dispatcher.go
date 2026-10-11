@@ -780,7 +780,7 @@ func (i *interpreter) unaryOverloads(m model.IUnaryExpression) ([]convert.Overlo
 		return []convert.Overload[evalUnarySignature]{
 			{
 				Operands: []types.IType{types.Any},
-				Result:   evalDescendants,
+				Result:   i.evalDescendants,
 			},
 		}, nil
 	case *model.Upper:
