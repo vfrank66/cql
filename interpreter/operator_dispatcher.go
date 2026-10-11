@@ -1220,31 +1220,31 @@ func (i *interpreter) binaryOverloads(m model.IBinaryExpression) ([]convert.Over
 			// Interval overloads
 			{
 				Operands: []types.IType{&types.Interval{PointType: types.Integer}, &types.Interval{PointType: types.Integer}},
-				Result:   evalExceptIntervalNumeral,
+				Result:   i.evalExceptInterval,
 			},
 			{
 				Operands: []types.IType{&types.Interval{PointType: types.Long}, &types.Interval{PointType: types.Long}},
-				Result:   evalExceptIntervalNumeral,
+				Result:   i.evalExceptInterval,
 			},
 			{
 				Operands: []types.IType{&types.Interval{PointType: types.Decimal}, &types.Interval{PointType: types.Decimal}},
-				Result:   evalExceptIntervalNumeral,
+				Result:   i.evalExceptInterval,
 			},
 			{
 				Operands: []types.IType{&types.Interval{PointType: types.Date}, &types.Interval{PointType: types.Date}},
-				Result:   i.evalExceptIntervalDateTime,
+				Result:   i.evalExceptInterval,
 			},
 			{
 				Operands: []types.IType{&types.Interval{PointType: types.DateTime}, &types.Interval{PointType: types.DateTime}},
-				Result:   i.evalExceptIntervalDateTime,
+				Result:   i.evalExceptInterval,
 			},
 			{
 				Operands: []types.IType{&types.Interval{PointType: types.Time}, &types.Interval{PointType: types.Time}},
-				Result:   i.evalExceptIntervalDateTime,
+				Result:   i.evalExceptInterval,
 			},
 			{
 				Operands: []types.IType{&types.Interval{PointType: types.Quantity}, &types.Interval{PointType: types.Quantity}},
-				Result:   evalExceptIntervalQuantity,
+				Result:   i.evalExceptInterval,
 			},
 		}, nil
 	case *model.Intersect:

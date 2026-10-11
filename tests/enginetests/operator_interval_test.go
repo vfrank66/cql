@@ -2085,7 +2085,7 @@ func TestExceptInterval(t *testing.T) {
 				StaticType:    &types.Interval{PointType: types.Quantity},
 			}),
 		},
-		// Date intervals (simplified - returns null for complex cases)
+		// Date intervals
 		{
 			name: "Date interval except - no overlap",
 			cql:  "Interval[@2020-01-01, @2020-01-05] except Interval[@2020-01-10, @2020-01-15]",
@@ -2117,6 +2117,159 @@ func TestExceptInterval(t *testing.T) {
 		{
 			name:       "DateTime interval except - complete overlap",
 			cql:        "Interval[@2020-01-03T, @2020-01-07T] except Interval[@2020-01-01T, @2020-01-10T]",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name: "Integer interval except - right ends at left start",
+			cql:  "Interval[0, 10] except Interval[-5, 0]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(1)),
+				High:          newOrFatal(t, int32(10)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval except - right starts at left end",
+			cql:  "Interval[0, 10] except Interval[10, 20]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(0)),
+				High:          newOrFatal(t, int32(9)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval except - right is left start point",
+			cql:  "Interval[0, 10] except Interval[0, 0]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(1)),
+				High:          newOrFatal(t, int32(10)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval except - open bounds",
+			cql:  "Interval(1, 5) except Interval(0, 3)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(3)),
+				High:          newOrFatal(t, int32(5)),
+				LowInclusive:  true,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval except - no overlap keeps open bounds",
+			cql:  "Interval(0, 5) except Interval[10, 20]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(0)),
+				High:          newOrFatal(t, int32(5)),
+				LowInclusive:  false,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval except - partial overlap keeps open low bound",
+			cql:  "Interval(0, 10] except Interval[5, 20]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int32(0)),
+				High:          newOrFatal(t, int32(4)),
+				LowInclusive:  false,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Integer interval except - null low bound",
+			cql:  "Interval[null, 10] except Interval[5, 20]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, nil),
+				High:          newOrFatal(t, int32(4)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Integer},
+			}),
+		},
+		{
+			name: "Long interval except - right starts at left end",
+			cql:  "Interval[0L, 10L] except Interval[10L, 20L]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int64(0)),
+				High:          newOrFatal(t, int64(9)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Long},
+			}),
+		},
+		{
+			name: "Quantity interval except - right starts at left end",
+			cql:  "Interval[0'cm', 10'cm'] except Interval[10'cm', 20'cm']",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Quantity{Value: 0, Unit: "cm"}),
+				High:          newOrFatal(t, result.Quantity{Value: 9.99999999, Unit: "cm"}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Quantity},
+			}),
+		},
+		{
+			name: "Quantity interval except - differing comparable units",
+			cql:  "Interval[0'cm', 10'cm'] except Interval[50'mm', 200'mm']",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Quantity{Value: 0, Unit: "cm"}),
+				High:          newOrFatal(t, result.Quantity{Value: 4.99999999, Unit: "cm"}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Quantity},
+			}),
+		},
+		{
+			name: "Date interval except - right ends at left start",
+			cql:  "Interval[@2020-01-05, @2020-01-10] except Interval[@2020-01-01, @2020-01-05]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Date{Date: time.Date(2020, time.January, 6, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				High:          newOrFatal(t, result.Date{Date: time.Date(2020, time.January, 10, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Date},
+			}),
+		},
+		{
+			name: "DateTime interval except - same day partial overlap",
+			cql:  "Interval[@2020-01-01T10:00:00.000Z, @2020-01-01T12:00:00.000Z] except Interval[@2020-01-01T11:00:00.000Z, @2020-01-01T13:00:00.000Z]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 10, 0, 0, 0, time.UTC), Precision: model.MILLISECOND}),
+				High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 10, 59, 59, 999000000, time.UTC), Precision: model.MILLISECOND}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.DateTime},
+			}),
+		},
+		{
+			name: "DateTime interval except - same day no overlap",
+			cql:  "Interval[@2020-01-01T10:00:00.000Z, @2020-01-01T12:00:00.000Z] except Interval[@2020-01-01T13:00:00.000Z, @2020-01-01T14:00:00.000Z]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 10, 0, 0, 0, time.UTC), Precision: model.MILLISECOND}),
+				High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 12, 0, 0, 0, time.UTC), Precision: model.MILLISECOND}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.DateTime},
+			}),
+		},
+		{
+			name:       "Quantity interval except - incomparable units",
+			cql:        "Interval[0'cm', 10'cm'] except Interval[5'g', 20'g']",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Date interval except - uncertain precision",
+			cql:        "Interval[@2020-01-01, @2020-01-10] except Interval[@2020-01, @2020-02]",
 			wantResult: newOrFatal(t, nil),
 		},
 	}
@@ -2159,11 +2312,6 @@ func TestComparison_Error(t *testing.T) {
 			name:                "Quantity in interval with not matching lower unit",
 			cql:                 "1'cm' in Interval[1'cm', 2'm']",
 			wantEvalErrContains: "in operator recieved Quantities with differing unit values",
-		},
-		{
-			name:                "Quantity interval except with mismatched units",
-			cql:                 "Interval[1'cm', 2'cm'] except Interval[1'm', 2'm']",
-			wantEvalErrContains: "except operator received Quantities with differing unit values",
 		},
 	}
 	for _, tc := range tests {
