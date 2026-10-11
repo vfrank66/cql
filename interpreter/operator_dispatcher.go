@@ -1505,6 +1505,14 @@ func (i *interpreter) naryOverloads(m model.INaryExpression) ([]convert.Overload
 				Result:   i.evalCollapseInteger,
 			},
 			{
+				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Long}}},
+				Result:   i.evalCollapseLong,
+			},
+			{
+				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Long}}, types.Quantity},
+				Result:   i.evalCollapseLong,
+			},
+			{
 				Operands: []types.IType{&types.List{ElementType: &types.Interval{PointType: types.Decimal}}},
 				Result:   i.evalCollapseDecimal,
 			},

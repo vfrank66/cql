@@ -662,6 +662,68 @@ func TestCollapse(t *testing.T) {
 				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Integer}},
 			}),
 		},
+		{
+			name: "Collapse Long intervals",
+			cql:  `collapse {Interval[1L, 5L], Interval[6L, 10L], Interval[1, 2]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, int64(1)),
+						High:          newOrFatal(t, int64(10)),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.Long},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.Long}},
+			}),
+		},
+		{
+			name: "Collapse DateTimes of mixed precision",
+			cql:  `collapse {Interval[@2020-01-01T10:30, @2020-01-01T10:35], Interval[@2020-01-01T10, @2020-01-01T10], Interval[@2020-01-01T10:31, @2020-01-01T10:40]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.HOUR}),
+						High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.HOUR}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.DateTime},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 30, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MINUTE}),
+						High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 40, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MINUTE}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.DateTime},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.DateTime}},
+			}),
+		},
+		{
+			name: "Collapse DateTimes of mixed precision in another order",
+			cql:  `collapse {Interval[@2020-01-01T10:30, @2020-01-01T10:35], Interval[@2020-01-01T10:31, @2020-01-01T10:40], Interval[@2020-01-01T10, @2020-01-01T10]}`,
+			want: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.HOUR}),
+						High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.HOUR}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.DateTime},
+					}),
+					newOrFatal(t, result.Interval{
+						Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 30, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MINUTE}),
+						High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, 1, 1, 10, 40, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MINUTE}),
+						LowInclusive:  true,
+						HighInclusive: true,
+						StaticType:    &types.Interval{PointType: types.DateTime},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Interval{PointType: types.DateTime}},
+			}),
+		},
 	}
 
 	for _, tc := range tests {

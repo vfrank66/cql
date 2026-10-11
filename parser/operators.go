@@ -1137,6 +1137,8 @@ func (p *Parser) loadSystemOperators() error {
 				{&types.List{ElementType: &types.Interval{PointType: types.Time}}, types.Quantity},
 				{&types.List{ElementType: &types.Interval{PointType: types.Integer}}},
 				{&types.List{ElementType: &types.Interval{PointType: types.Integer}}, types.Quantity},
+				{&types.List{ElementType: &types.Interval{PointType: types.Long}}},
+				{&types.List{ElementType: &types.Interval{PointType: types.Long}}, types.Quantity},
 				{&types.List{ElementType: &types.Interval{PointType: types.Decimal}}},
 				{&types.List{ElementType: &types.Interval{PointType: types.Decimal}}, types.Quantity},
 				{&types.List{ElementType: &types.Interval{PointType: types.Quantity}}},

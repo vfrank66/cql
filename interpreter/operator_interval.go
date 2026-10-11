@@ -655,6 +655,10 @@ func (i *interpreter) evalCollapseInteger(m model.INaryExpression, operands []re
 	return collapse(operands, &i.evaluationTimestamp, compareNumeralValues(result.ToInt32))
 }
 
+func (i *interpreter) evalCollapseLong(m model.INaryExpression, operands []result.Value) (result.Value, error) {
+	return collapse(operands, &i.evaluationTimestamp, compareNumeralValues(result.ToInt64))
+}
+
 func (i *interpreter) evalCollapseDecimal(m model.INaryExpression, operands []result.Value) (result.Value, error) {
 	return collapse(operands, &i.evaluationTimestamp, compareNumeralValues(result.ToFloat64))
 }
@@ -779,22 +783,50 @@ func newIntervalList(intervals []collapseInterval, listType *types.List) (result
 	return result.New(result.List{Value: values, StaticType: listType})
 }
 
-// sortIntervalsByStartTime sorts intervals by start, unknown starts first. Starts that cannot be
-// ordered, such as DateTimes of different precision, keep their input order.
+// sortIntervalsByStartTime sorts intervals by start, unknown starts first, then by end, unknown
+// ends last. The order is total, so the result does not depend on the input order.
 func sortIntervalsByStartTime(intervals []collapseInterval, compare pointComparator) error {
 	var sortErr error
 	sort.SliceStable(intervals, func(a, b int) bool {
-		left, right := intervals[a].start, intervals[b].start
-		if result.IsNull(left) || result.IsNull(right) {
-			return result.IsNull(left) && !result.IsNull(right)
+		c, err := orderPoints(intervals[a].start, intervals[b].start, true, compare)
+		if err == nil && c == leftEqualRight {
+			c, err = orderPoints(intervals[a].end, intervals[b].end, false, compare)
 		}
-		c, err := compare(left, right)
 		if err != nil && sortErr == nil {
 			sortErr = err
 		}
 		return c == leftBeforeRight
 	})
 	return sortErr
+}
+
+// orderPoints compares two points for sorting. A DateTime that is equal to a finer DateTime up to
+// its own precision sorts first, since compare cannot order the two.
+func orderPoints(left, right result.Value, nullsFirst bool, compare pointComparator) (comparison, error) {
+	leftNull, rightNull := result.IsNull(left), result.IsNull(right)
+	if leftNull || rightNull {
+		switch {
+		case leftNull == rightNull:
+			return leftEqualRight, nil
+		case leftNull == nullsFirst:
+			return leftBeforeRight, nil
+		default:
+			return leftAfterRight, nil
+		}
+	}
+	c, err := compare(left, right)
+	if err != nil || c != insufficientPrecision {
+		return c, err
+	}
+	l, r, err := applyToValues(left, right, result.ToDateTime)
+	if err != nil {
+		return unsetComparison, err
+	}
+	// precisionGreaterOrEqual is true when l is the coarser precision.
+	if precisionGreaterOrEqual(l.Precision, r.Precision) {
+		return leftBeforeRight, nil
+	}
+	return leftAfterRight, nil
 }
 
 // canMerge returns true if current and next provably overlap or meet. current must not start
