@@ -83,7 +83,7 @@ func (v *visitor) resolveFunction(libraryName, funcName string, operands []model
 	case *model.Intersect:
 		leftType := resolved.WrappedOperands[0].GetResultType()
 		rightType := resolved.WrappedOperands[1].GetResultType()
-		
+
 		// Check if this is a list intersect or interval intersect
 		if listTypeLeft, ok := leftType.(*types.List); ok {
 			// List intersect

@@ -171,8 +171,8 @@ func TestIntersectInterval(t *testing.T) {
 			wantResult: newOrFatal(t, nil),
 		},
 		{
-			name:       "Integer intervals touching at boundary",
-			cql:        "Interval[1, 3] intersect Interval[3, 7]",
+			name: "Integer intervals touching at boundary",
+			cql:  "Interval[1, 3] intersect Interval[3, 7]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(3)),
 				High:          newOrFatal(t, int32(3)),
@@ -187,8 +187,8 @@ func TestIntersectInterval(t *testing.T) {
 			wantResult: newOrFatal(t, nil),
 		},
 		{
-			name:       "Identical integer intervals",
-			cql:        "Interval[1, 5] intersect Interval[1, 5]",
+			name: "Identical integer intervals",
+			cql:  "Interval[1, 5] intersect Interval[1, 5]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(1)),
 				High:          newOrFatal(t, int32(5)),
@@ -215,8 +215,8 @@ func TestIntersectInterval(t *testing.T) {
 		},
 		// Decimal interval tests
 		{
-			name:       "Decimal intervals with overlap",
-			cql:        "Interval[1.5, 5.5] intersect Interval[3.0, 7.0]",
+			name: "Decimal intervals with overlap",
+			cql:  "Interval[1.5, 5.5] intersect Interval[3.0, 7.0]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, 3.0),
 				High:          newOrFatal(t, 5.5),
@@ -232,8 +232,8 @@ func TestIntersectInterval(t *testing.T) {
 		},
 		// Long interval tests
 		{
-			name:       "Long intervals with overlap",
-			cql:        "Interval[1L, 5L] intersect Interval[3L, 7L]",
+			name: "Long intervals with overlap",
+			cql:  "Interval[1L, 5L] intersect Interval[3L, 7L]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int64(3)),
 				High:          newOrFatal(t, int64(5)),
@@ -244,8 +244,8 @@ func TestIntersectInterval(t *testing.T) {
 		},
 		// Quantity interval tests
 		{
-			name:       "Quantity intervals with overlap",
-			cql:        "Interval[1'cm', 5'cm'] intersect Interval[3'cm', 7'cm']",
+			name: "Quantity intervals with overlap",
+			cql:  "Interval[1'cm', 5'cm'] intersect Interval[3'cm', 7'cm']",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, result.Quantity{Value: 3, Unit: "cm"}),
 				High:          newOrFatal(t, result.Quantity{Value: 5, Unit: "cm"}),
@@ -256,8 +256,8 @@ func TestIntersectInterval(t *testing.T) {
 		},
 		// Date interval tests
 		{
-			name:       "Date intervals with overlap",
-			cql:        "Interval[@2020-01-01, @2020-06-01] intersect Interval[@2020-03-01, @2020-09-01]",
+			name: "Date intervals with overlap",
+			cql:  "Interval[@2020-01-01, @2020-06-01] intersect Interval[@2020-03-01, @2020-09-01]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, result.Date{Date: time.Date(2020, time.March, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
 				High:          newOrFatal(t, result.Date{Date: time.Date(2020, time.June, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
@@ -273,8 +273,8 @@ func TestIntersectInterval(t *testing.T) {
 		},
 		// DateTime interval tests
 		{
-			name:       "DateTime intervals with overlap",
-			cql:        "Interval[@2020-01-01T10:00:00, @2020-01-01T15:00:00] intersect Interval[@2020-01-01T12:00:00, @2020-01-01T18:00:00]",
+			name: "DateTime intervals with overlap",
+			cql:  "Interval[@2020-01-01T10:00:00, @2020-01-01T15:00:00] intersect Interval[@2020-01-01T12:00:00, @2020-01-01T18:00:00]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 12, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.SECOND}),
 				High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 15, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.SECOND}),
@@ -285,8 +285,8 @@ func TestIntersectInterval(t *testing.T) {
 		},
 		// Edge cases
 		{
-			name:       "First interval completely contains second",
-			cql:        "Interval[1, 10] intersect Interval[3, 7]",
+			name: "First interval completely contains second",
+			cql:  "Interval[1, 10] intersect Interval[3, 7]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(3)),
 				High:          newOrFatal(t, int32(7)),
@@ -296,8 +296,8 @@ func TestIntersectInterval(t *testing.T) {
 			}),
 		},
 		{
-			name:       "Second interval completely contains first",
-			cql:        "Interval[3, 7] intersect Interval[1, 10]",
+			name: "Second interval completely contains first",
+			cql:  "Interval[3, 7] intersect Interval[1, 10]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(3)),
 				High:          newOrFatal(t, int32(7)),
@@ -307,8 +307,8 @@ func TestIntersectInterval(t *testing.T) {
 			}),
 		},
 		{
-			name:       "Intervals with mixed inclusivity",
-			cql:        "Interval[1, 5) intersect Interval(3, 7]",
+			name: "Intervals with mixed inclusivity",
+			cql:  "Interval[1, 5) intersect Interval(3, 7]",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(4)),
 				High:          newOrFatal(t, int32(4)),
@@ -319,8 +319,8 @@ func TestIntersectInterval(t *testing.T) {
 		},
 		// Functional syntax
 		{
-			name:       "Functional syntax",
-			cql:        "Intersect(Interval[1, 5], Interval[3, 7])",
+			name: "Functional syntax",
+			cql:  "Intersect(Interval[1, 5], Interval[3, 7])",
 			wantResult: newOrFatal(t, result.Interval{
 				Low:           newOrFatal(t, int32(3)),
 				High:          newOrFatal(t, int32(5)),

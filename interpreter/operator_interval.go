@@ -1074,7 +1074,6 @@ func (i *interpreter) evalIntersectIntervalTime(lStart, lEnd, rStart, rEnd resul
 	return result.New(intersectionInterval)
 }
 
-
 // Helper functions for min/max calculations
 func maxInt32(a, b int32) int32 {
 	if a > b {
