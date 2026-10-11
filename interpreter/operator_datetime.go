@@ -321,7 +321,7 @@ func afterTime(l, r result.Time) (result.Value, error) {
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTime(lDateTime, rDateTime)
 	if err != nil {
 		return result.Value{}, err
@@ -345,7 +345,7 @@ func beforeTime(l, r result.Time) (result.Value, error) {
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTime(lDateTime, rDateTime)
 	if err != nil {
 		return result.Value{}, err
@@ -369,7 +369,7 @@ func afterOrEqualTime(l, r result.Time) (result.Value, error) {
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTime(lDateTime, rDateTime)
 	if err != nil {
 		return result.Value{}, err
@@ -393,7 +393,7 @@ func beforeOrEqualTime(l, r result.Time) (result.Value, error) {
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTime(lDateTime, rDateTime)
 	if err != nil {
 		return result.Value{}, err
@@ -418,7 +418,7 @@ func afterTimeWithPrecision(l, r result.Time, p model.DateTimePrecision) (result
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTimeWithPrecision(lDateTime, rDateTime, p)
 	if err != nil {
 		return result.Value{}, err
@@ -443,7 +443,7 @@ func beforeTimeWithPrecision(l, r result.Time, p model.DateTimePrecision) (resul
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTimeWithPrecision(lDateTime, rDateTime, p)
 	if err != nil {
 		return result.Value{}, err
@@ -468,7 +468,7 @@ func afterOrEqualTimeWithPrecision(l, r result.Time, p model.DateTimePrecision) 
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTimeWithPrecision(lDateTime, rDateTime, p)
 	if err != nil {
 		return result.Value{}, err
@@ -493,7 +493,7 @@ func beforeOrEqualTimeWithPrecision(l, r result.Time, p model.DateTimePrecision)
 	// Convert Time to DateTime for comparison
 	lDateTime := result.DateTime{Date: l.Date, Precision: l.Precision}
 	rDateTime := result.DateTime{Date: r.Date, Precision: r.Precision}
-	
+
 	compareResult, err := compareDateTimeWithPrecision(lDateTime, rDateTime, p)
 	if err != nil {
 		return result.Value{}, err
@@ -1183,14 +1183,14 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 	if result.IsNull(obj) {
 		return result.New(nil)
 	}
-	
+
 	componentFrom, ok := m.(*model.DateTimeComponentFrom)
 	if !ok {
 		return result.Value{}, fmt.Errorf("internal error - expected DateTimeComponentFrom, got %T", m)
 	}
-	
+
 	precision := componentFrom.Precision
-	
+
 	// Handle different operand types
 	switch obj.RuntimeType() {
 	case types.DateTime:
@@ -1198,12 +1198,12 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		// Check if the DateTime has sufficient precision for the requested component
 		if !precisionGreaterOrEqual(dt.Precision, precision) {
 			return result.New(nil)
 		}
-		
+
 		switch precision {
 		case model.YEAR:
 			return result.New(int32(dt.Date.Year()))
@@ -1222,18 +1222,18 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		default:
 			return result.Value{}, fmt.Errorf("internal error - unsupported DateTime component precision %v", precision)
 		}
-		
+
 	case types.Date:
 		d, err := result.ToDate(obj)
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		// Check if the Date has sufficient precision for the requested component
 		if !precisionGreaterOrEqual(d.Precision, precision) {
 			return result.New(nil)
 		}
-		
+
 		switch precision {
 		case model.YEAR:
 			return result.New(int32(d.Date.Year()))
@@ -1244,18 +1244,18 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		default:
 			return result.Value{}, fmt.Errorf("internal error - unsupported Date component precision %v", precision)
 		}
-		
+
 	case types.Time:
 		t, err := result.ToTime(obj)
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		// Check if the Time has sufficient precision for the requested component
 		if !precisionGreaterOrEqual(t.Precision, precision) {
 			return result.New(nil)
 		}
-		
+
 		switch precision {
 		case model.HOUR:
 			return result.New(int32(t.Date.Hour()))
@@ -1268,7 +1268,7 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		default:
 			return result.Value{}, fmt.Errorf("internal error - unsupported Time component precision %v", precision)
 		}
-		
+
 	default:
 		return result.Value{}, fmt.Errorf("internal error - DateTimeComponentFrom called with unsupported type %v", obj.RuntimeType())
 	}
@@ -1283,24 +1283,24 @@ func evalTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (result.V
 	if result.IsNull(obj) {
 		return result.New(nil)
 	}
-	
+
 	t, err := result.ToTime(obj)
 	if err != nil {
 		return result.Value{}, err
 	}
-	
+
 	componentFrom, ok := m.(*model.TimeComponentFrom)
 	if !ok {
 		return result.Value{}, fmt.Errorf("internal error - expected TimeComponentFrom, got %T", m)
 	}
-	
+
 	precision := componentFrom.Precision
-	
+
 	// Check if the Time has sufficient precision for the requested component
 	if !precisionGreaterOrEqual(t.Precision, precision) {
 		return result.New(nil)
 	}
-	
+
 	switch precision {
 	case model.HOUR:
 		return result.New(int32(t.Date.Hour()))

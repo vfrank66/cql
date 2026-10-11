@@ -20,13 +20,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/google/cql/internal/convert"
 	"github.com/google/cql/internal/datehelpers"
 	"github.com/google/cql/internal/embeddata/third_party/cqframework/cql"
 	"github.com/google/cql/model"
 	"github.com/google/cql/types"
 	"github.com/google/cql/ucum"
-	"github.com/antlr4-go/antlr/v4"
 )
 
 func (v *visitor) VisitExpression(tree antlr.Tree) model.IExpression {
@@ -188,14 +188,14 @@ func (v *visitor) VisitParenthesizedTerm(ctx *cql.ParenthesizedTermContext) mode
 }
 
 func (v *visitor) VisitTimeUnitExpressionTerm(ctx *cql.TimeUnitExpressionTermContext) model.IExpression {
-	// parses statements like: "[year|month|day|hour|second|timezone] from [Date|DateTime|Time]" 
+	// parses statements like: "[year|month|day|hour|second|timezone] from [Date|DateTime|Time]"
 	// "date from expression", "hour from expression", etc.
 	dtc := ctx.GetChild(0).(*cql.DateTimeComponentContext)
 	switch component := dtc.GetChild(0).(type) {
 	case antlr.TerminalNode:
 		dateTimeComponent := component.GetText()
 		operand := v.VisitExpression(ctx.ExpressionTerm())
-		
+
 		switch dateTimeComponent {
 		case "date":
 			return &model.ToDate{
