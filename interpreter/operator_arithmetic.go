@@ -1060,7 +1060,7 @@ func maxValue(t types.IType, evaluationTimestamp *time.Time) (result.Value, erro
 		if evaluationTimestamp == nil {
 			return result.Value{}, fmt.Errorf("internal error - evaluation timestamp cannot be nil for DateTime max value")
 		}
-		return result.New(result.DateTime{Date: time.Date(9999, 12, 31, 23, 59, 59, 999000000, time.UTC), Precision: model.MILLISECOND})
+		return result.New(result.DateTime{Date: time.Date(9999, 12, 31, 23, 59, 59, 999, evaluationTimestamp.Location()), Precision: model.MILLISECOND})
 	case types.Time:
 		if evaluationTimestamp == nil {
 			return result.Value{}, fmt.Errorf("internal error - evaluation timestamp cannot be nil for Time max value")

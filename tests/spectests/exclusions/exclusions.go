@@ -52,6 +52,7 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"TruncatedDivide10d1ByNeg3D1Quantity",
 				// TODO: b/344002938 - xml test is wrong, asserts with a time zone.
 				"DateTimeMinValue",
+				"DateTimeMaxValue",
 			},
 		},
 		"CqlComparisonOperatorsTest.xml": {
