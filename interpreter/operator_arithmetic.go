@@ -511,37 +511,21 @@ func bigIntPow(l, r int64) any {
 	if r == 0 {
 		return int64(1)
 	}
-
 	if r == 1 {
 		return l
 	}
-
 	exponentNegative := r < 0
 	if exponentNegative {
-		r = -r // Use absolute value for calculation
+		r = -r
 	}
-
 	bigL := big.NewInt(l)
 	bigR := big.NewInt(r)
-	bigResult := new(big.Int).Exp(bigL, bigR, nil)
-
-	// For positive exponents, return as int64
-	if !exponentNegative {
-		// If the result is too large for int64, this might panic
-		// But it seems the calling code expects this type
-		return bigResult.Int64()
+	bigResult := new(big.Int)
+	bigResult.Exp(bigL, bigR, nil)
+	if exponentNegative {
+		return 1.0 / float64(bigResult.Int64())
 	}
-
-	// For negative exponents, we need to return a float64
-	resultFloat := new(big.Float).SetInt(bigResult)
-	oneFloat := big.NewFloat(1.0)
-
-	// Calculate 1/result with high precision
-	quotient := new(big.Float).Quo(oneFloat, resultFloat)
-
-	// Convert to float64 as expected by the calling function
-	result, _ := quotient.Float64()
-	return result
+	return bigResult.Int64()
 }
 
 // Arithmetic operations for Quantity values.
