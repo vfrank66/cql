@@ -882,7 +882,7 @@ func (i *interpreter) evalDateTimeComponentFrom(m model.IUnaryExpression, val re
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		switch dtComponent.Component {
 		case model.TIMEZONEOFFSET:
 			// Timezone offset is always available for DateTime values regardless of precision
@@ -919,13 +919,13 @@ func (i *interpreter) evalDateTimeComponentFrom(m model.IUnaryExpression, val re
 		default:
 			return result.Value{}, fmt.Errorf("unsupported date/time component: %v", dtComponent.Component)
 		}
-		
+
 	case types.Date:
 		d, err := result.ToDate(val)
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		// Check if the precision is sufficient
 		if !precisionGreaterOrEqual(dtComponent.Component, d.Precision) {
 			return result.New(nil)
@@ -944,13 +944,13 @@ func (i *interpreter) evalDateTimeComponentFrom(m model.IUnaryExpression, val re
 		default:
 			return result.Value{}, fmt.Errorf("unsupported date component: %v", dtComponent.Component)
 		}
-		
+
 	case types.Time:
 		t, err := result.ToTime(val)
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		switch dtComponent.Component {
 		case model.YEAR, model.MONTH, model.DAY:
 			// These components don't exist in Time values
@@ -982,7 +982,7 @@ func (i *interpreter) evalDateTimeComponentFrom(m model.IUnaryExpression, val re
 		default:
 			return result.Value{}, fmt.Errorf("unsupported time component: %v", dtComponent.Component)
 		}
-		
+
 	default:
 		return result.Value{}, fmt.Errorf("operand is not a DateTime, Date, or Time value, got %v", val.RuntimeType())
 	}

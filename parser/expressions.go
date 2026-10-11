@@ -190,7 +190,7 @@ func (v *visitor) VisitParenthesizedTerm(ctx *cql.ParenthesizedTermContext) mode
 func (v *visitor) VisitTimeUnitExpressionTerm(ctx *cql.TimeUnitExpressionTermContext) model.IExpression {
 	// parses statements like: "date from expression" or "year from date"
 	dtc := ctx.GetChild(0).(*cql.DateTimeComponentContext)
-	
+
 	var dateTimeComponent string
 	switch component := dtc.GetChild(0).(type) {
 	case antlr.TerminalNode:

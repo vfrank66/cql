@@ -48,7 +48,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "year from @2023",
 			wantResult: newOrFatal(t, int32(2023)),
 		},
-		
+
 		// Month extraction tests
 		{
 			name:       "Month from Date",
@@ -65,7 +65,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "month from @2023-05",
 			wantResult: newOrFatal(t, int32(5)),
 		},
-		
+
 		// Day extraction tests
 		{
 			name:       "Day from Date",
@@ -77,7 +77,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "day from @2020-03-15T14:30:25.123",
 			wantResult: newOrFatal(t, int32(15)),
 		},
-		
+
 		// Hour extraction tests
 		{
 			name:       "Hour from DateTime",
@@ -89,7 +89,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "hour from @T14:30:25.123",
 			wantResult: newOrFatal(t, int32(14)),
 		},
-		
+
 		// Minute extraction tests
 		{
 			name:       "Minute from DateTime",
@@ -101,7 +101,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "minute from @T14:30:25.123",
 			wantResult: newOrFatal(t, int32(30)),
 		},
-		
+
 		// Second extraction tests
 		{
 			name:       "Second from DateTime",
@@ -113,7 +113,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "second from @T14:30:25.123",
 			wantResult: newOrFatal(t, int32(25)),
 		},
-		
+
 		// Millisecond extraction tests
 		{
 			name:       "Millisecond from DateTime",
@@ -125,7 +125,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "millisecond from @T14:30:25.123",
 			wantResult: newOrFatal(t, int32(123)),
 		},
-		
+
 		// Null handling tests
 		{
 			name:       "Year from null",
@@ -137,7 +137,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "month from (null as Date)",
 			wantResult: newOrFatal(t, nil),
 		},
-		
+
 		// Precision boundary tests - requesting unavailable precision should return null
 		{
 			name:       "Hour from Date returns null",
@@ -174,7 +174,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "day from @T14:30:25.123",
 			wantResult: newOrFatal(t, nil),
 		},
-		
+
 		// Precision insufficient tests - requesting higher precision than available
 		{
 			name:       "Month from year-precision Date returns null",
@@ -206,7 +206,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "millisecond from @T14:30:25",
 			wantResult: newOrFatal(t, nil),
 		},
-		
+
 		// Edge cases
 		{
 			name:       "Year from leap year",
@@ -263,7 +263,7 @@ func TestDateTimeComponentFrom(t *testing.T) {
 			cql:        "millisecond from @2020-01-01T14:30:25.999",
 			wantResult: newOrFatal(t, int32(999)),
 		},
-		
+
 		// Timezone offset extraction tests
 		{
 			name:       "Timezone offset from DateTime with positive offset",
@@ -345,7 +345,7 @@ func TestDateTimeComponentFromPrecisionLogic(t *testing.T) {
 			cql:        "day from @2020-03-15",
 			wantResult: newOrFatal(t, int32(15)),
 		},
-		
+
 		// Test precision logic with different Time precisions
 		{
 			name:       "Hour from hour-precision Time",
