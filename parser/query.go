@@ -55,11 +55,6 @@ func (v *visitor) VisitQuery(ctx *cql.QueryContext) model.IExpression {
 		return v.badExpression(err.Error(), ctx.WhereClause())
 	}
 
-	q, err = v.parseSortClause(ctx.SortClause(), q)
-	if err != nil {
-		return v.badExpression(err.Error(), ctx.SortClause())
-	}
-
 	q, err = v.parseAggregateClause(ctx.AggregateClause(), q)
 	if err != nil {
 		return v.badExpression(err.Error(), ctx.AggregateClause())
@@ -72,6 +67,12 @@ func (v *visitor) VisitQuery(ctx *cql.QueryContext) model.IExpression {
 		if err != nil {
 			return v.badExpression(err.Error(), ctx.ReturnClause())
 		}
+	}
+
+	// The sort clause orders the query result, so it is parsed after the return clause.
+	q, err = v.parseSortClause(ctx.SortClause(), q)
+	if err != nil {
+		return v.badExpression(err.Error(), ctx.SortClause())
 	}
 	return q
 }
@@ -227,13 +228,13 @@ func (v *visitor) parseSortClause(sc cql.ISortClauseContext, q *model.Query) (*m
 			return nil, err
 		}
 
-		v.refs.EnterStructScope(func() model.IExpression { return q.Source[0] })
+		if _, ok := q.GetResultType().(*types.List); !ok {
+			return nil, fmt.Errorf("sort by requires a query that returns a list, got %v", q.GetResultType())
+		}
+		v.refs.EnterStructScope(func() model.IExpression { return q })
 		defer v.refs.ExitStructScope()
 
-		// Set sort context flag to allow forward references in sort expressions
-		v.inSortContext = true
 		sortExpr := v.VisitExpression(sbi.ExpressionTerm())
-		v.inSortContext = false
 
 		switch t := sortExpr.(type) {
 		case *model.IdentifierRef:

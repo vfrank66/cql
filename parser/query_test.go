@@ -712,6 +712,18 @@ func TestQuery_Errors(t *testing.T) {
 			errContains: []string{"alias P already exists"},
 			errCount:    1,
 		},
+		{
+			name:        "Sort by a column the return clause does not have",
+			cql:         "({Tuple{a: 3}, Tuple{a: 1}}) T return Tuple{b: T.a} sort by a",
+			errContains: []string{"could not resolve the local reference to a"},
+			errCount:    1,
+		},
+		{
+			name:        "Sort by on a query that does not return a list",
+			cql:         "(Tuple{a: 1}) T sort by a",
+			errContains: []string{"sort by requires a query that returns a list, got Tuple<a: System.Integer>"},
+			errCount:    1,
+		},
 	}
 
 	for _, test := range tests {

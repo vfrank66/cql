@@ -16,6 +16,7 @@ package enginetests
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -1161,6 +1162,56 @@ func TestQuery(t *testing.T) {
 				}}},
 			}),
 		},
+		{
+			name: "Sort by field with null sorts null first ascending",
+			cql: dedent.Dedent(`
+			define TESTRESULT:
+			  ({null as Integer, 3, 1}) I
+			    return Tuple { value: I }
+			    sort by value asc`),
+			wantResult: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Tuple{
+						Value:       map[string]result.Value{"value": newOrFatal(t, nil)},
+						RuntimeType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}},
+					}),
+					newOrFatal(t, result.Tuple{
+						Value:       map[string]result.Value{"value": newOrFatal(t, 1)},
+						RuntimeType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}},
+					}),
+					newOrFatal(t, result.Tuple{
+						Value:       map[string]result.Value{"value": newOrFatal(t, 3)},
+						RuntimeType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}}},
+			}),
+		},
+		{
+			name: "Sort by field with null sorts null last descending",
+			cql: dedent.Dedent(`
+			define TESTRESULT:
+			  ({3, null as Integer, 1}) I
+			    return Tuple { value: I }
+			    sort by value desc`),
+			wantResult: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Tuple{
+						Value:       map[string]result.Value{"value": newOrFatal(t, 3)},
+						RuntimeType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}},
+					}),
+					newOrFatal(t, result.Tuple{
+						Value:       map[string]result.Value{"value": newOrFatal(t, 1)},
+						RuntimeType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}},
+					}),
+					newOrFatal(t, result.Tuple{
+						Value:       map[string]result.Value{"value": newOrFatal(t, nil)},
+						RuntimeType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}},
+					}),
+				},
+				StaticType: &types.List{ElementType: &types.Tuple{ElementTypes: map[string]types.IType{"value": types.Integer}}},
+			}),
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1186,6 +1237,43 @@ func TestQuery(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.wantSourceValues, gotResult.SourceValues(), protocmp.Transform()); tc.wantSourceValues != nil && diff != "" {
 				t.Errorf("Eval SourceValues diff (-want +got)\n%v", diff)
+			}
+		})
+	}
+}
+
+func TestQuery_EvalErrors(t *testing.T) {
+	tests := []struct {
+		name                string
+		cql                 string
+		wantEvalErrContains string
+	}{
+		{
+			name:                "Sort by Time field is not supported",
+			cql:                 "({@T10:00, @T09:00}) I return Tuple { value: I } sort by value",
+			wantEvalErrContains: "sort column of a query must evaluate to a Date, DateTime, Integer, Decimal, Long, or String, instead got System.Time",
+		},
+		{
+			name:                "Sort by Quantity field is not supported",
+			cql:                 "({3 'mg', 1 'mg'}) I return Tuple { value: I } sort by value",
+			wantEvalErrContains: "sort column of a query must evaluate to a Date, DateTime, Integer, Decimal, Long, or String, instead got System.Quantity",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newFHIRParser(t)
+			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
+			if err != nil {
+				t.Fatalf("Parse returned unexpected error: %v", err)
+			}
+
+			_, err = interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
+			if err == nil {
+				t.Fatalf("Evaluate Expression expected an error to be returned, got nil instead")
+			}
+			if !strings.Contains(err.Error(), tc.wantEvalErrContains) {
+				t.Errorf("Unexpected evaluation error contents. got: %v, want contains: %v", err.Error(), tc.wantEvalErrContains)
 			}
 		})
 	}

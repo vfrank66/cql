@@ -16,10 +16,10 @@ import (
 
 func TestCrossLibraryAliasResolution(t *testing.T) {
 	tests := []struct {
-		name       string
-		libraries  []string
-		wantResult result.Value
-		wantError  string
+		name                 string
+		libraries            []string
+		wantResult           result.Value
+		wantParseErrContains string
 	}{
 		{
 			name: "Cross library function calls with alias M - should reproduce the error",
@@ -158,7 +158,7 @@ func TestCrossLibraryAliasResolution(t *testing.T) {
 				    where exists(TC.Above({6, 7}, 5)) and M < 3
 				`),
 			},
-			wantError: "could not resolve the local reference to M",
+			wantParseErrContains: "could not resolve the local reference to M",
 		},
 	}
 
@@ -173,12 +173,12 @@ func TestCrossLibraryAliasResolution(t *testing.T) {
 			}
 
 			parsedLibs, err := p.Libraries(context.Background(), libsWithHelpers, parser.Config{})
-			if tc.wantError != "" {
+			if tc.wantParseErrContains != "" {
 				if err == nil {
-					t.Fatalf("Expected parse error containing %q, but got no error", tc.wantError)
+					t.Fatalf("Expected parse error containing %q, but got no error", tc.wantParseErrContains)
 				}
-				if !strings.Contains(err.Error(), tc.wantError) {
-					t.Fatalf("Expected parse error containing %q, but got: %v", tc.wantError, err)
+				if !strings.Contains(err.Error(), tc.wantParseErrContains) {
+					t.Fatalf("Expected parse error containing %q, but got: %v", tc.wantParseErrContains, err)
 				}
 				return
 			}
@@ -187,15 +187,6 @@ func TestCrossLibraryAliasResolution(t *testing.T) {
 			}
 
 			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
-			if tc.wantError != "" {
-				if err == nil {
-					t.Fatalf("Expected eval error containing %q, but got no error", tc.wantError)
-				}
-				if !strings.Contains(err.Error(), tc.wantError) {
-					t.Fatalf("Expected eval error containing %q, but got: %v", tc.wantError, err)
-				}
-				return
-			}
 			if err != nil {
 				t.Fatalf("Eval returned unexpected error: %v", err)
 			}

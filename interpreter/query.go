@@ -504,16 +504,13 @@ func compareNumeralInt[t float64 | int64 | int32](left, right t) int {
 	}
 }
 
-func (i *interpreter) dateTimeOrError(v result.Value) (result.Value, error) {
-	switch sr := v.GolangValue().(type) {
-	case result.DateTime:
-		return v, nil
-	case result.Named:
-		if sr.RuntimeType.Equal(&types.Named{TypeName: "FHIR.dateTime"}) {
-			return i.protoProperty(sr, "value", types.DateTime)
-		}
+// unwrapFHIRDateTime returns the System.DateTime held by a FHIR.dateTime, and any other value
+// unchanged.
+func (i *interpreter) unwrapFHIRDateTime(v result.Value) (result.Value, error) {
+	if sr, ok := v.GolangValue().(result.Named); ok && sr.RuntimeType.Equal(&types.Named{TypeName: "FHIR.dateTime"}) {
+		return i.protoProperty(sr, "value", types.DateTime)
 	}
-	return result.Value{}, fmt.Errorf("sorting only currently supported on DateTime columns")
+	return v, nil
 }
 
 // getSortValue returns the value to be used for the comparison-based sort. This
@@ -543,12 +540,7 @@ func (i *interpreter) getSortValue(it model.ISortByItem, v result.Value) (result
 		return result.Value{}, fmt.Errorf("internal error - unsupported sort by item type: %T", iv)
 	}
 
-	if converted, err := i.dateTimeOrError(rv); err == nil {
-		return converted, nil
-	}
-
-	// Return the original value for non-DateTime types (Integer, String, etc.)
-	return rv, nil
+	return i.unwrapFHIRDateTime(rv)
 }
 
 func (i *interpreter) sortByColumnOrExpression(objs []result.Value, sbis []model.ISortByItem) error {
@@ -585,9 +577,16 @@ func (i *interpreter) sortByColumnOrExpression(objs []result.Value, sbis []model
 	return sortErr
 }
 
-// compareSortValues orders two sort values of the same type. Values of a type that cannot be
-// ordered compare as equal, so the next sort item decides.
+// compareSortValues orders two sort values of the same type. Null sorts before any other value.
 func compareSortValues(a, b result.Value) (int, error) {
+	switch {
+	case result.IsNull(a) && result.IsNull(b):
+		return 0, nil
+	case result.IsNull(a):
+		return -1, nil
+	case result.IsNull(b):
+		return 1, nil
+	}
 	switch a.RuntimeType() {
 	case types.DateTime:
 		// In the future when we have an implementation of dateTime comparison without precision we should swap to using that.
@@ -628,5 +627,5 @@ func compareSortValues(a, b result.Value) (int, error) {
 		}
 		return strings.Compare(av, bv), nil
 	}
-	return 0, nil
+	return 0, fmt.Errorf("sort column of a query must evaluate to a Date, DateTime, Integer, Decimal, Long, or String, instead got %v", a.RuntimeType())
 }
