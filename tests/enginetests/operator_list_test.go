@@ -213,6 +213,44 @@ func TestDescendants(t *testing.T) {
 			}),
 		},
 		{
+			name: "Quantity descendants are its value and unit",
+			cql:  "Descendants(5 'mg')",
+			wantResult: newOrFatal(t, result.List{
+				Value:      []result.Value{newOrFatal(t, 5.0), newOrFatal(t, "mg")},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "Ratio descendants are its quantities and their elements",
+			cql:  "Descendants(1 'mg' : 2 'mL')",
+			wantResult: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Quantity{Value: 1, Unit: "mg"}), newOrFatal(t, 1.0), newOrFatal(t, "mg"),
+					newOrFatal(t, result.Quantity{Value: 2, Unit: "mL"}), newOrFatal(t, 2.0), newOrFatal(t, "mL"),
+				},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "Code descendants skip unset optional elements",
+			cql:  "Descendants(Code { code: '123', system: 'http://example.com', display: 'd' })",
+			wantResult: newOrFatal(t, result.List{
+				Value:      []result.Value{newOrFatal(t, "123"), newOrFatal(t, "http://example.com"), newOrFatal(t, "d")},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "Concept descendants are its codes, their elements and its display",
+			cql:  "Descendants(Concept { codes: { Code { code: '1', system: 's' } }, display: 'c' })",
+			wantResult: newOrFatal(t, result.List{
+				Value: []result.Value{
+					newOrFatal(t, result.Code{Code: "1", System: "s"}), newOrFatal(t, "1"), newOrFatal(t, "s"),
+					newOrFatal(t, "c"),
+				},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
 			name: "FHIR resource elements in document order",
 			cql:  "Descendants(First([Observation]))",
 			resources: []*r4pb.ContainedResource{containedFromObservation(&r4observationpb.Observation{

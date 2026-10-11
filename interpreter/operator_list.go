@@ -499,6 +499,30 @@ func (i *interpreter) elementChildren(v result.Value) ([]result.Value, error) {
 		for _, k := range keys {
 			children = appendFlattened(children, ot.Value[k])
 		}
+	case result.Quantity:
+		return systemChildren(ot.Value, string(ot.Unit))
+	case result.Ratio:
+		return systemChildren(ot.Numerator, ot.Denominator)
+	case result.Code:
+		return systemChildren(ot.Code, ot.System, ot.Version, ot.Display)
+	case result.Concept:
+		for _, c := range ot.Codes {
+			if c == nil {
+				continue
+			}
+			child, err := result.New(*c)
+			if err != nil {
+				return nil, err
+			}
+			children = append(children, child)
+		}
+		if ot.Display != "" {
+			child, err := result.New(ot.Display)
+			if err != nil {
+				return nil, err
+			}
+			children = append(children, child)
+		}
 	case result.Named:
 		msg := ot.Value.ProtoReflect()
 		fields := msg.Descriptor().Fields()
@@ -524,6 +548,23 @@ func (i *interpreter) elementChildren(v result.Value) ([]result.Value, error) {
 			}
 			children = appendFlattened(children, child)
 		}
+	}
+	return children, nil
+}
+
+// systemChildren returns the elements of a System structured type in declaration order. Empty
+// strings are unset optional elements, so they are dropped like nulls.
+func systemChildren(elems ...any) ([]result.Value, error) {
+	var children []result.Value
+	for _, e := range elems {
+		if s, ok := e.(string); ok && s == "" {
+			continue
+		}
+		child, err := result.New(e)
+		if err != nil {
+			return nil, err
+		}
+		children = append(children, child)
 	}
 	return children, nil
 }
