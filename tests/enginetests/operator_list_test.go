@@ -175,10 +175,26 @@ func TestDescendants(t *testing.T) {
 			}),
 		},
 		{
-			name: "Nested lists are flattened",
+			name: "List operand returns descendants of each element, not the elements",
+			cql:  "Descendants({Tuple{c: 1}, Tuple{c: 2}})",
+			wantResult: newOrFatal(t, result.List{
+				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2))},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "Nested list operand is flattened",
+			cql:  "Descendants({Tuple{a: 1}, {Tuple{b: 2}}})",
+			wantResult: newOrFatal(t, result.List{
+				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2))},
+				StaticType: &types.List{ElementType: types.Any},
+			}),
+		},
+		{
+			name: "List of primitives has no descendants",
 			cql:  "Descendants({1, {2, 3}})",
 			wantResult: newOrFatal(t, result.List{
-				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2)), newOrFatal(t, int32(3))},
+				Value:      []result.Value{},
 				StaticType: &types.List{ElementType: types.Any},
 			}),
 		},
@@ -227,6 +243,14 @@ func TestDescendants(t *testing.T) {
 				}},
 			})},
 			wantResult: newOrFatal(t, 4),
+		},
+		{
+			name: "Retrieve operand excludes the resources themselves",
+			cql:  "Count(Descendants([Observation]))",
+			resources: []*r4pb.ContainedResource{containedFromObservation(&r4observationpb.Observation{
+				Status: &r4observationpb.Observation_StatusCode{Value: c4pb.ObservationStatusCode_FINAL},
+			})},
+			wantResult: newOrFatal(t, 1),
 		},
 	}
 	for _, tc := range tests {

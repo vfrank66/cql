@@ -453,14 +453,17 @@ func evalTail(m model.IUnaryExpression, listObj result.Value) (result.Value, err
 
 // Descendants(argument Any) List<Any>
 // FHIRPath: .descendants() === Descendants(X)
-// Returns every element below the operand as a flat list, in document order.
+// Returns every element below the operand as a flat list, in document order. For a list operand,
+// the result is the flattened descendants of each element, never the elements themselves.
 func (i *interpreter) evalDescendants(m model.IUnaryExpression, operand result.Value) (result.Value, error) {
 	if result.IsNull(operand) {
 		return result.New(nil)
 	}
 	descendants := []result.Value{}
-	if err := i.appendDescendants(operand, &descendants); err != nil {
-		return result.Value{}, err
+	for _, elem := range appendFlattened(nil, operand) {
+		if err := i.appendDescendants(elem, &descendants); err != nil {
+			return result.Value{}, err
+		}
 	}
 	return result.New(result.List{
 		Value:      descendants,
@@ -487,8 +490,6 @@ func (i *interpreter) appendDescendants(v result.Value, descendants *[]result.Va
 func (i *interpreter) elementChildren(v result.Value) ([]result.Value, error) {
 	var children []result.Value
 	switch ot := v.GolangValue().(type) {
-	case result.List:
-		children = appendFlattened(children, v)
 	case result.Tuple:
 		keys := make([]string, 0, len(ot.Value))
 		for k := range ot.Value {
@@ -509,7 +510,8 @@ func (i *interpreter) elementChildren(v result.Value) ([]result.Value, error) {
 			property := fd.JSONName()
 			staticType, err := i.modelInfo.PropertyTypeSpecifier(ot.RuntimeType, property)
 			if err != nil {
-				// Proto-only fields (e.g. valueUs on FHIR.dateTime) are not FHIR elements.
+				// Proto-only fields (e.g. valueUs on FHIR.dateTime) are not FHIR elements. This also
+				// skips Reference.reference, a proto oneof the engine has no property support for.
 				continue
 			}
 			// System-typed elements are a primitive's own value or Element.id, not FHIR nodes.
