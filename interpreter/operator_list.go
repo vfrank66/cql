@@ -457,32 +457,32 @@ func evalDescendants(m model.IUnaryExpression, operand result.Value) (result.Val
 	if result.IsNull(operand) {
 		return result.New(nil)
 	}
-	
+
 	var allDescendants []result.Value
-	
+
 	// Get immediate children of the operand
 	children, err := getElementChildren(operand)
 	if err != nil {
 		return result.Value{}, err
 	}
-	
+
 	// For each child, add it and recursively get its descendants
 	for _, child := range children {
 		allDescendants = append(allDescendants, child)
-		
+
 		// Recursively get descendants of this child
 		childDescendants, err := evalDescendants(m, child)
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		if !result.IsNull(childDescendants) {
 			if list, ok := childDescendants.GolangValue().(result.List); ok {
 				allDescendants = append(allDescendants, list.Value...)
 			}
 		}
 	}
-	
+
 	return result.New(result.List{
 		Value:      allDescendants,
 		StaticType: &types.List{ElementType: types.Any},

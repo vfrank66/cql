@@ -217,8 +217,8 @@ func TestFluentFunctionCaseSensitivity(t *testing.T) {
 			wantResult: newOrFatal(t, true),
 		},
 		{
-			name:       "Distinct fluent - capital D",
-			cql:        "{1, 1, 2}.Distinct()",
+			name: "Distinct fluent - capital D",
+			cql:  "{1, 1, 2}.Distinct()",
 			wantResult: newOrFatal(t, result.List{
 				Value:      []result.Value{newOrFatal(t, int32(1)), newOrFatal(t, int32(2))},
 				StaticType: &types.List{ElementType: types.Integer},
