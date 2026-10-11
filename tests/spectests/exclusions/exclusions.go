@@ -77,7 +77,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 		"CqlDateTimeOperatorsTest.xml": {
 			GroupExcludes: []string{
 				// TODO: b/342061715 - unsupported operators.
-				"DateTimeComponentFrom",
 				"Duration",
 				// TODO: b/342064491 - runtime error: invalid memory address or nil pointer dereference.
 				"SameAs",
@@ -92,19 +91,8 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"DateSubtract2YearsAsMonths",
 				"DateSubtract2YearsAsMonthsRem1",
 				"DateSubtract1Year",
-				"DateTimeComponentFromYear",
-				"DateTimeComponentFromMonth",
-				"DateTimeComponentFromMonthMinBoundary",
-				"DateTimeComponentFromDay",
-				"DateTimeComponentFromHour",
-				"DateTimeComponentFromMinute",
-				"DateTimeComponentFromSecond",
-				"DateTimeComponentFromMillisecond",
 				"DateTimeComponentFromTimezone",
-				"TimeComponentFromHour",
-				"TimeComponentFromMinute",
-				"TimeComponentFromSecond",
-				"TimeComponentFromMilli",
+				"DateTimeComponentFromTimezone2",
 				"TimeAdd5Hours",
 				"TimeAdd1Minute",
 				"TimeAdd1Second",
@@ -323,8 +311,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 			NamesExcludes: []string{
 				// TODO: b/342064012 - Uncertain result.
 				"DateTimeUncertain",
-				// TODO: b/342061715 - unsupported operators.
-				"DateTimeTimeUnspecified",
 				// TODO: b/343515613 - fails with unexpected result. Technically not supported.
 				"StringUnicodeTest",
 				// TODO: b/343515819 - fails with unexpected result.
@@ -343,8 +329,6 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"ToTime",
 			},
 			NamesExcludes: []string{
-				// TODO: b/342061715 - unsupported operators.
-				"ToDateTimeTimeUnspecified",
 				// TODO: b/343515613 - fails with unexpected result. Technically not supported.
 				"ToDateTimeMalformed",
 			},
