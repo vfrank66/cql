@@ -202,7 +202,7 @@ func XMLTestFileExclusionDefinitions() map[string]XMLTestFileExclusions {
 				"TimeDurationBetweenSecond",
 				"TimeDurationBetweenMillis",
 				"DurationInHoursA",
-				"DurationInMinutesA", 
+				"DurationInMinutesA",
 				"DurationInDaysA",
 				"DurationInDaysAA",
 				"DateTimeDifferenceUncertain",

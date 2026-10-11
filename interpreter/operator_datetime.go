@@ -334,17 +334,17 @@ func calculateMinDuration(l, r result.DateTime, p model.DateTimePrecision) (int,
 	// This means expanding the left date to its latest possible value and right to its earliest
 	maxLeft := expandDateTimeToLatest(l)
 	minRight := expandDateTimeToEarliest(r)
-	
+
 	resultVal, err := dateTimeDifference(maxLeft, minRight, p)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	val, err := result.ToInt32(resultVal)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return int(val), nil
 }
 
@@ -355,17 +355,17 @@ func calculateMaxDuration(l, r result.DateTime, p model.DateTimePrecision) (int,
 	// This means expanding the left date to its earliest possible value and right to its latest
 	minLeft := expandDateTimeToEarliest(l)
 	maxRight := expandDateTimeToLatest(r)
-	
+
 	resultVal, err := dateTimeDifference(minLeft, maxRight, p)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	val, err := result.ToInt32(resultVal)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return int(val), nil
 }
 
@@ -375,7 +375,7 @@ func expandDateTimeToEarliest(dt result.DateTime) result.DateTime {
 	if dt.Precision == model.MILLISECOND {
 		return dt
 	}
-	
+
 	// Set all unspecified components to their minimum values
 	year := dt.Date.Year()
 	month := dt.Date.Month()
@@ -384,7 +384,7 @@ func expandDateTimeToEarliest(dt result.DateTime) result.DateTime {
 	minute := dt.Date.Minute()
 	second := dt.Date.Second()
 	nanosecond := dt.Date.Nanosecond()
-	
+
 	switch dt.Precision {
 	case model.YEAR:
 		month = 1
@@ -414,7 +414,7 @@ func expandDateTimeToEarliest(dt result.DateTime) result.DateTime {
 	case model.SECOND:
 		nanosecond = 0
 	}
-	
+
 	return result.DateTime{
 		Date:      time.Date(year, month, day, hour, minute, second, nanosecond, dt.Date.Location()),
 		Precision: dt.Precision,
@@ -427,7 +427,7 @@ func expandDateTimeToLatest(dt result.DateTime) result.DateTime {
 	if dt.Precision == model.MILLISECOND {
 		return dt
 	}
-	
+
 	// Set all unspecified components to their maximum values
 	year := dt.Date.Year()
 	month := dt.Date.Month()
@@ -436,7 +436,7 @@ func expandDateTimeToLatest(dt result.DateTime) result.DateTime {
 	minute := dt.Date.Minute()
 	second := dt.Date.Second()
 	nanosecond := dt.Date.Nanosecond()
-	
+
 	switch dt.Precision {
 	case model.YEAR:
 		month = 12
@@ -467,7 +467,7 @@ func expandDateTimeToLatest(dt result.DateTime) result.DateTime {
 	case model.SECOND:
 		nanosecond = 999 * int(time.Millisecond/time.Nanosecond)
 	}
-	
+
 	return result.DateTime{
 		Date:      time.Date(year, month, day, hour, minute, second, nanosecond, dt.Date.Location()),
 		Precision: dt.Precision,
@@ -1204,10 +1204,10 @@ func evalDurationBetweenDateTime(b model.IBinaryExpression, lObj, rObj result.Va
 		hasUncertainty = l.Precision == model.YEAR || r.Precision == model.YEAR
 	case model.MONTH:
 		// For month calculations, we need at least day precision to be certain
-		hasUncertainty = (l.Precision == model.YEAR || l.Precision == model.MONTH) || 
-						 (r.Precision == model.YEAR || r.Precision == model.MONTH)
+		hasUncertainty = (l.Precision == model.YEAR || l.Precision == model.MONTH) ||
+			(r.Precision == model.YEAR || r.Precision == model.MONTH)
 	default:
-		// For all other precisions (day, hour, minute, second, millisecond), 
+		// For all other precisions (day, hour, minute, second, millisecond),
 		// we only have uncertainty if we don't have sufficient precision
 		hasUncertainty = !precisionGreaterOrEqual(l.Precision, p) || !precisionGreaterOrEqual(r.Precision, p)
 	}
@@ -1218,7 +1218,7 @@ func evalDurationBetweenDateTime(b model.IBinaryExpression, lObj, rObj result.Va
 		if err != nil {
 			return result.Value{}, err
 		}
-		
+
 		maxDuration, err := calculateMaxDuration(l, r, p)
 		if err != nil {
 			return result.Value{}, err
@@ -1239,11 +1239,11 @@ func evalDurationBetweenDateTime(b model.IBinaryExpression, lObj, rObj result.Va
 			return result.Value{}, err
 		}
 		return result.New(result.Interval{
-			Low:          lowVal,
-			High:         highVal,
-			LowInclusive: true,
+			Low:           lowVal,
+			High:          highVal,
+			LowInclusive:  true,
 			HighInclusive: true,
-			StaticType:   &types.Interval{PointType: types.Integer},
+			StaticType:    &types.Interval{PointType: types.Integer},
 		})
 	}
 

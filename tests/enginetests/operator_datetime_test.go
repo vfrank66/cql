@@ -1198,11 +1198,11 @@ func TestDurationOperators(t *testing.T) {
 			name: "Years between with uncertainty",
 			cql:  "years between DateTime(2005) and DateTime(2010)",
 			wantResult: newOrFatal(t, result.Interval{
-				Low:          newOrFatal(t, 4),
-				High:         newOrFatal(t, 5),
-				LowInclusive: true,
+				Low:           newOrFatal(t, 4),
+				High:          newOrFatal(t, 5),
+				LowInclusive:  true,
 				HighInclusive: true,
-				StaticType:   &types.Interval{PointType: types.Integer},
+				StaticType:    &types.Interval{PointType: types.Integer},
 			}),
 		},
 
@@ -1231,7 +1231,6 @@ func TestDurationOperators(t *testing.T) {
 			cql:        "duration in days of Interval[start of Interval[@2012-01-01, @2012-01-15], end of Interval[@2012-01-10, @2012-01-31]]",
 			wantResult: newOrFatal(t, 30),
 		},
-
 
 		// Leap year handling
 		{
@@ -1301,22 +1300,22 @@ func TestDurationBetweenWithTimezones(t *testing.T) {
 			name: "Hours between with timezone offset",
 			cql:  "hours between @2017-03-12T01:00:00-07:00 and @2017-03-12T03:00:00-06:00",
 			wantResult: newOrFatal(t, result.Interval{
-				Low:          newOrFatal(t, 0),
-				High:         newOrFatal(t, 1),
-				LowInclusive: true,
+				Low:           newOrFatal(t, 0),
+				High:          newOrFatal(t, 1),
+				LowInclusive:  true,
 				HighInclusive: true,
-				StaticType:   &types.Interval{PointType: types.Integer},
+				StaticType:    &types.Interval{PointType: types.Integer},
 			}),
 		},
 		{
 			name: "Minutes between with timezone offset",
 			cql:  "minutes between @2017-11-05T01:30:00-06:00 and @2017-11-05T01:15:00-07:00",
 			wantResult: newOrFatal(t, result.Interval{
-				Low:          newOrFatal(t, 44),
-				High:         newOrFatal(t, 45),
-				LowInclusive: true,
+				Low:           newOrFatal(t, 44),
+				High:          newOrFatal(t, 45),
+				LowInclusive:  true,
 				HighInclusive: true,
-				StaticType:   &types.Interval{PointType: types.Integer},
+				StaticType:    &types.Interval{PointType: types.Integer},
 			}),
 		},
 		{
