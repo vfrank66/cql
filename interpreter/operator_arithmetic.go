@@ -362,10 +362,15 @@ func evalPrecisionDecimal(_ model.IUnaryExpression, obj result.Value) (result.Va
 }
 
 // decimalPrecision returns the number of digits after the decimal point of a Decimal.
-// TODO: b/301606416 - Trailing zeros are only known for Decimal literals. Any other Decimal is a
-// float64, so it is rounded to maxDecimalPrecision digits and its trailing zeros are dropped.
+// TODO: b/301606416 - Trailing zeros are only known for Decimal literals, and for negated ones such
+// as -1.50, which parse as Negate(1.50). Any other Decimal is a float64, so it is rounded to
+// maxDecimalPrecision digits and its trailing zeros are dropped.
 func decimalPrecision(obj result.Value) (int, error) {
-	if l, ok := obj.SourceExpression().(*model.Literal); ok && l.GetResultType() == types.Decimal {
+	src := obj.SourceExpression()
+	if n, ok := src.(*model.Negate); ok {
+		src = n.Operand
+	}
+	if l, ok := src.(*model.Literal); ok && l.GetResultType() == types.Decimal {
 		_, fraction, _ := strings.Cut(l.Value, ".")
 		return len(fraction), nil
 	}

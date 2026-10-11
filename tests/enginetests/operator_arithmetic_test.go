@@ -690,8 +690,18 @@ func TestPrecision(t *testing.T) {
 			wantResult: newOrFatal(t, 5),
 		},
 		{
+			name:       "Negative Decimal literal keeps trailing zeros",
+			cql:        "Precision(-1.50)",
+			wantResult: newOrFatal(t, 2),
+		},
+		{
 			name:       "Decimal expression drops trailing zeros",
 			cql:        "Precision(0.000000 + 0.1)",
+			wantResult: newOrFatal(t, 1),
+		},
+		{
+			name:       "Negative Decimal expression drops trailing zeros",
+			cql:        "Precision(-(1.50 + 0.0))",
 			wantResult: newOrFatal(t, 1),
 		},
 		{
@@ -980,6 +990,11 @@ func TestLowBoundary(t *testing.T) {
 			name:       "Negative Decimal precision 0",
 			cql:        "LowBoundary(-1.587, 0)",
 			wantResult: newOrFatal(t, -2.0),
+		},
+		{
+			name:       "Negative Decimal literal trailing zero",
+			cql:        "LowBoundary(-1.50, 4)",
+			wantResult: newOrFatal(t, -1.5099),
 		},
 		{
 			name:       "Decimal null precision",
