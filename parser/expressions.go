@@ -191,9 +191,9 @@ func (v *visitor) VisitTimeUnitExpressionTerm(ctx *cql.TimeUnitExpressionTermCon
 	// parses statements like: "[year|month|day|hour|second|timezone] from [Date|DateTime|Time]"
 	// "date from expression", "hour from expression", etc.
 	dtc := ctx.GetChild(0).(*cql.DateTimeComponentContext)
-	switch component := dtc.GetChild(0).(type) {
-	case antlr.TerminalNode:
-		dateTimeComponent := component.GetText()
+	switch dtc.GetChild(0).(type) {
+	case antlr.TerminalNode, *cql.DateTimePrecisionContext:
+		dateTimeComponent := dtc.GetText()
 		operand := v.VisitExpression(ctx.ExpressionTerm())
 
 		switch dateTimeComponent {

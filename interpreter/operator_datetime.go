@@ -1200,7 +1200,7 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		}
 
 		// Check if the DateTime has sufficient precision for the requested component
-		if !precisionGreaterOrEqual(dt.Precision, precision) {
+		if !precisionGreaterOrEqual(precision, dt.Precision) {
 			return result.New(nil)
 		}
 
@@ -1218,7 +1218,7 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		case model.SECOND:
 			return result.New(int32(dt.Date.Second()))
 		case model.MILLISECOND:
-			return result.New(int32(dt.Date.UnixMilli() % 1000))
+			return result.New(int32(dt.Date.Nanosecond() / int(time.Millisecond)))
 		default:
 			return result.Value{}, fmt.Errorf("internal error - unsupported DateTime component precision %v", precision)
 		}
@@ -1230,7 +1230,7 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		}
 
 		// Check if the Date has sufficient precision for the requested component
-		if !precisionGreaterOrEqual(d.Precision, precision) {
+		if !precisionGreaterOrEqual(precision, d.Precision) {
 			return result.New(nil)
 		}
 
@@ -1252,7 +1252,7 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		}
 
 		// Check if the Time has sufficient precision for the requested component
-		if !precisionGreaterOrEqual(t.Precision, precision) {
+		if !precisionGreaterOrEqual(precision, t.Precision) {
 			return result.New(nil)
 		}
 
@@ -1264,7 +1264,7 @@ func evalDateTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (resu
 		case model.SECOND:
 			return result.New(int32(t.Date.Second()))
 		case model.MILLISECOND:
-			return result.New(int32(t.Date.UnixMilli() % 1000))
+			return result.New(int32(t.Date.Nanosecond() / int(time.Millisecond)))
 		default:
 			return result.Value{}, fmt.Errorf("internal error - unsupported Time component precision %v", precision)
 		}
@@ -1297,7 +1297,7 @@ func evalTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (result.V
 	precision := componentFrom.Precision
 
 	// Check if the Time has sufficient precision for the requested component
-	if !precisionGreaterOrEqual(t.Precision, precision) {
+	if !precisionGreaterOrEqual(precision, t.Precision) {
 		return result.New(nil)
 	}
 
@@ -1309,7 +1309,7 @@ func evalTimeComponentFrom(m model.IUnaryExpression, obj result.Value) (result.V
 	case model.SECOND:
 		return result.New(int32(t.Date.Second()))
 	case model.MILLISECOND:
-		return result.New(int32(t.Date.UnixMilli() % 1000))
+		return result.New(int32(t.Date.Nanosecond() / int(time.Millisecond)))
 	default:
 		return result.Value{}, fmt.Errorf("internal error - unsupported Time component precision %v", precision)
 	}
