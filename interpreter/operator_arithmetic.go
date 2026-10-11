@@ -19,6 +19,7 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +37,8 @@ const (
 	// In the future we may switch to using math.MaxFloat64.
 	maxDecimal = float64(99999999999999999999.99999999)
 	minDecimal = float64(-99999999999999999999.99999999)
+	// maxDecimalPrecision is the number of digits a CQL Decimal holds after the decimal point.
+	maxDecimalPrecision = 8
 )
 
 // Abs(argument Decimal) Decimal
@@ -347,68 +350,31 @@ func arithmetic[t float64 | int64 | int32](m model.IBinaryExpression, l, r t) (r
 
 // Precision(arg Decimal) Integer
 // https://cql.hl7.org/09-b-cqlreference.html#precision
-// For Decimal values, the function returns the number of digits of precision after the decimal place.
-// TODO: golang trims trailing zeroes which is opposite the CQL spec. Options:
-// 1. Ignore the CQL spec, does it really matter?
-// 2. Modify result.Value to hold the original string value, could be perf cost
-// 3. Create custom Decimal type
 func evalPrecisionDecimal(_ model.IUnaryExpression, obj result.Value) (result.Value, error) {
 	if result.IsNull(obj) {
 		return result.New(nil)
 	}
-
-	if sourceExpr := obj.SourceExpression(); sourceExpr != nil {
-		// Navigate through source expressions to find the original literal
-		// This handles both direct literals and literals that have been processed through the evaluation pipeline
-		var literal *model.Literal
-
-		if lit, ok := sourceExpr.(*model.Literal); ok && lit.GetResultType() == types.Decimal {
-			literal = lit
-		}
-
-		if literal == nil {
-			for _, sourceVal := range obj.SourceValues() {
-				if srcExpr := sourceVal.SourceExpression(); srcExpr != nil {
-					if lit, ok := srcExpr.(*model.Literal); ok && lit.GetResultType() == types.Decimal {
-						literal = lit
-						break
-					}
-				}
-			}
-		}
-
-		if literal != nil {
-			parts := strings.Split(literal.Value, ".")
-			if len(parts) > 1 {
-				return result.New(int32(len(parts[1])))
-			}
-			return result.New(int32(0)) // No decimal part
-		}
-	}
-
-	// Fallback
-	val, err := result.ToFloat64(obj)
+	p, err := decimalPrecision(obj)
 	if err != nil {
 		return result.Value{}, err
 	}
+	return result.New(int32(p))
+}
 
-	// Convert to string with high precision - a balance between
-	// not truncating significant digits and not adding spurious precision
-	strVal := strconv.FormatFloat(val, 'f', 16, 64)
-
-	// Trim trailing zeros after the last significant digit
-	strVal = strings.TrimRight(strVal, "0")
-	if strings.HasSuffix(strVal, ".") {
-		strVal += "0"
+// decimalPrecision returns the number of digits after the decimal point of a Decimal.
+// TODO: b/301606416 - Trailing zeros are only known for Decimal literals. Any other Decimal is a
+// float64, so it is rounded to maxDecimalPrecision digits and its trailing zeros are dropped.
+func decimalPrecision(obj result.Value) (int, error) {
+	if l, ok := obj.SourceExpression().(*model.Literal); ok && l.GetResultType() == types.Decimal {
+		_, fraction, _ := strings.Cut(l.Value, ".")
+		return len(fraction), nil
 	}
-
-	decimalIndex := strings.Index(strVal, ".")
-	if decimalIndex == -1 {
-		return result.New(int32(0))
+	d, err := result.ToFloat64(obj)
+	if err != nil {
+		return 0, err
 	}
-
-	precision := len(strVal) - decimalIndex - 1
-	return result.New(int32(precision))
+	_, fraction, _ := strings.Cut(strconv.FormatFloat(d, 'f', maxDecimalPrecision, 64), ".")
+	return len(strings.TrimRight(fraction, "0")), nil
 }
 
 // Precision(arg Date) Integer
@@ -464,6 +430,191 @@ func evalPrecisionTime(_ model.IUnaryExpression, obj result.Value) (result.Value
 	default:
 		return result.Value{}, fmt.Errorf("internal error - unsupported Time precision %v", dt.Precision)
 	}
+}
+
+// HighBoundary(input Decimal, precision Integer) Decimal
+// https://cql.hl7.org/09-b-cqlreference.html#highboundary
+func evalHighBoundaryDecimal(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
+	return decimalBoundary(input, precision, true)
+}
+
+// LowBoundary(input Decimal, precision Integer) Decimal
+// https://cql.hl7.org/09-b-cqlreference.html#lowboundary
+func evalLowBoundaryDecimal(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
+	return decimalBoundary(input, precision, false)
+}
+
+// decimalBoundary returns the greatest (high) or least value that input can stand for, with
+// precision digits after the decimal point. A null precision means maxDecimalPrecision. A negative
+// precision, or one above maxDecimalPrecision, returns null.
+func decimalBoundary(input, precision result.Value, high bool) (result.Value, error) {
+	if result.IsNull(input) {
+		return result.New(nil)
+	}
+	p := maxDecimalPrecision
+	if !result.IsNull(precision) {
+		v, err := result.ToInt32(precision)
+		if err != nil {
+			return result.Value{}, err
+		}
+		p = int(v)
+	}
+	if p < 0 || p > maxDecimalPrecision {
+		return result.New(nil)
+	}
+	d, err := result.ToFloat64(input)
+	if err != nil {
+		return result.Value{}, err
+	}
+	inputPrecision, err := decimalPrecision(input)
+	if err != nil {
+		return result.Value{}, err
+	}
+
+	// The digits are handled as a string so that float rounding does not change them.
+	whole, fraction, _ := strings.Cut(strconv.FormatFloat(math.Abs(d), 'f', inputPrecision, 64), ".")
+	// The high boundary of a positive value and the low boundary of a negative value are away from
+	// zero, so the digits the input does not have are 9s instead of 0s.
+	awayFromZero := high == (d >= 0)
+	var boundary float64
+	if p >= inputPrecision {
+		fill := "0"
+		if awayFromZero {
+			fill = "9"
+		}
+		boundary, err = strconv.ParseFloat(whole+"."+fraction+strings.Repeat(fill, p-inputPrecision), 64)
+	} else {
+		boundary, err = strconv.ParseFloat(whole+"."+fraction[:p], 64)
+		if err == nil && awayFromZero && strings.Trim(fraction[p:], "0") != "" {
+			boundary, err = strconv.ParseFloat(strconv.FormatFloat(boundary+math.Pow10(-p), 'f', p, 64), 64)
+		}
+	}
+	if err != nil {
+		return result.Value{}, err
+	}
+	if d < 0 && boundary != 0 {
+		boundary = -boundary
+	}
+	return result.New(boundary)
+}
+
+// precisionDigits is a precision of a Date, DateTime or Time, and its number of digits.
+type precisionDigits struct {
+	digits    int
+	precision model.DateTimePrecision
+}
+
+// The precisions HighBoundary and LowBoundary support for each type, from coarsest to finest.
+var (
+	datePrecisionDigits = []precisionDigits{
+		{4, model.YEAR}, {6, model.MONTH}, {8, model.DAY},
+	}
+	dateTimePrecisionDigits = []precisionDigits{
+		{4, model.YEAR}, {6, model.MONTH}, {8, model.DAY}, {10, model.HOUR}, {12, model.MINUTE},
+		{14, model.SECOND}, {17, model.MILLISECOND},
+	}
+	timePrecisionDigits = []precisionDigits{
+		{2, model.HOUR}, {4, model.MINUTE}, {6, model.SECOND}, {9, model.MILLISECOND},
+	}
+)
+
+// HighBoundary(input Date, precision Integer) Date
+// HighBoundary(input DateTime, precision Integer) DateTime
+// HighBoundary(input Time, precision Integer) Time
+// https://cql.hl7.org/09-b-cqlreference.html#highboundary
+func evalHighBoundaryDateTime(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
+	return dateTimeBoundary(input, precision, true)
+}
+
+// LowBoundary(input Date, precision Integer) Date
+// LowBoundary(input DateTime, precision Integer) DateTime
+// LowBoundary(input Time, precision Integer) Time
+// https://cql.hl7.org/09-b-cqlreference.html#lowboundary
+func evalLowBoundaryDateTime(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
+	return dateTimeBoundary(input, precision, false)
+}
+
+// dateTimeBoundary returns the latest (high) or earliest value that a Date, DateTime or Time input
+// can stand for at precision, given in digits. A null precision means the finest precision of the
+// type. A precision between two precisions of the type is handled as the coarser one, and a
+// precision outside the precisions of the type returns null.
+func dateTimeBoundary(input, precision result.Value, high bool) (result.Value, error) {
+	if result.IsNull(input) {
+		return result.New(nil)
+	}
+	var supported []precisionDigits
+	switch input.RuntimeType() {
+	case types.Date:
+		supported = datePrecisionDigits
+	case types.DateTime:
+		supported = dateTimePrecisionDigits
+	case types.Time:
+		supported = timePrecisionDigits
+	default:
+		return result.Value{}, fmt.Errorf("internal error - unsupported type %v for boundary", input.RuntimeType())
+	}
+	digits := supported[len(supported)-1].digits
+	if !result.IsNull(precision) {
+		v, err := result.ToInt32(precision)
+		if err != nil {
+			return result.Value{}, err
+		}
+		digits = int(v)
+	}
+	if digits < supported[0].digits || digits > supported[len(supported)-1].digits {
+		return result.New(nil)
+	}
+	var target model.DateTimePrecision
+	for _, s := range supported {
+		if s.digits <= digits {
+			target = s.precision
+		}
+	}
+
+	dt, err := result.ToDateTime(input)
+	if err != nil {
+		return result.Value{}, err
+	}
+	t, err := boundaryTime(dt.Date, dt.Precision, target, high)
+	if err != nil {
+		return result.Value{}, err
+	}
+	switch input.RuntimeType() {
+	case types.Date:
+		return result.New(result.Date{Date: t, Precision: target})
+	case types.DateTime:
+		return result.New(result.DateTime{Date: t, Precision: target})
+	default:
+		return result.New(result.Time{Date: t, Precision: target})
+	}
+}
+
+// boundaryTime returns t at precision target. The parts that t knows, up to its precision, are
+// kept. The parts it does not know are set to their latest (high) or earliest value, and the parts
+// finer than target are set to their earliest value.
+func boundaryTime(t time.Time, precision, target model.DateTimePrecision, high bool) (time.Time, error) {
+	order := []model.DateTimePrecision{model.YEAR, model.MONTH, model.DAY, model.HOUR, model.MINUTE, model.SECOND, model.MILLISECOND}
+	known, last := slices.Index(order, precision), slices.Index(order, target)
+	if known == -1 {
+		return time.Time{}, fmt.Errorf("internal error - unsupported precision %v for boundary", precision)
+	}
+	parts := []int{t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond() / int(time.Millisecond)}
+	earliest := []int{1, 1, 1, 0, 0, 0, 0}
+	latest := []int{9999, 12, 31, 23, 59, 59, 999}
+	for i := range parts {
+		if i <= known && i <= last {
+			continue
+		}
+		parts[i] = earliest[i]
+		if high && i <= last {
+			parts[i] = latest[i]
+		}
+	}
+	if high && known < 2 && last >= 2 {
+		// Day 0 of the next month is the last day of this month.
+		parts[2] = time.Date(parts[0], time.Month(parts[1]+1), 0, 0, 0, 0, 0, time.UTC).Day()
+	}
+	return time.Date(parts[0], time.Month(parts[1]), parts[2], parts[3], parts[4], parts[5], parts[6]*int(time.Millisecond), t.Location()), nil
 }
 
 // ^(left Integer, right Integer) Integer
@@ -1059,411 +1210,6 @@ func maxValue(t types.IType, evaluationTimestamp *time.Time) (result.Value, erro
 // to UTC for min/max values, we use the evaluation timestamp's timezone.
 // We do this because when creating a literal it's also in the evaluation timestamp's timezone, and
 // some external tests will fail when these are different.
-// HighBoundary(input Decimal, precision Integer) Decimal
-// https://cql.hl7.org/09-b-cqlreference.html#highboundary
-func evalHighBoundaryDecimal(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	decValue, err := result.ToFloat64(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	precValue, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	// For general implementation
-	strValue := fmt.Sprintf("%.15f", decValue)
-	parts := strings.Split(strValue, ".")
-
-	var resultStr string
-
-	if precValue > 0 {
-		// Truncate the fractional part to the first 3 characters and then add 9s
-		// to fill up to the specified precision
-		fractionalPart := parts[1]
-		significantPart := ""
-
-		if len(fractionalPart) > 0 {
-			// Take up to 3 significant digits (or fewer if that's all we have)
-			significantDigits := 3
-			if len(fractionalPart) < significantDigits {
-				significantDigits = len(fractionalPart)
-			}
-			significantPart = fractionalPart[:significantDigits]
-		}
-
-		// Fill remaining digits with 9s up to precision
-		ninetail := ""
-		if int(precValue) > len(significantPart) {
-			ninetail = strings.Repeat("9", int(precValue)-len(significantPart))
-		}
-
-		resultStr = parts[0] + "." + significantPart + ninetail
-	} else {
-		resultStr = parts[0]
-	}
-
-	resultVal, err := strconv.ParseFloat(resultStr, 64)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	return result.New(resultVal)
-}
-
-// HighBoundary(input Date, precision Integer) Date
-// https://cql.hl7.org/09-b-cqlreference.html#highboundary
-func evalHighBoundaryDate(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	dt, err := result.ToDateTime(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	prec, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	dateTime := dt.Date
-	year, _, _ := dateTime.Date()
-
-	switch prec {
-	case 4: // Year precision
-		// End of year
-		return result.New(result.Date{
-			Date:      time.Date(year, 12, 31, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.YEAR,
-		})
-	case 6: // Month precision (YYYY-MM)
-		// For month precision, the test expects December of the input year
-		return result.New(result.Date{
-			Date:      time.Date(year, 12, 1, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.MONTH,
-		})
-	case 8: // Day precision (YYYY-MM-DD)
-		// Keep the day as is
-		_, month, day := dateTime.Date()
-		return result.New(result.Date{
-			Date:      time.Date(year, month, day, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.DAY,
-		})
-	default:
-		return result.Value{}, fmt.Errorf("unsupported precision %d for Date high boundary", prec)
-	}
-}
-
-// HighBoundary(input DateTime, precision Integer) DateTime
-// https://cql.hl7.org/09-b-cqlreference.html#highboundary
-func evalHighBoundaryDateTime(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	dt, err := result.ToDateTime(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	prec, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	dateTime := dt.Date
-	year, month, day := dateTime.Date()
-	hour, minute, second := dateTime.Clock()
-
-	switch prec {
-	case 4: // Year precision
-		// End of year
-		return result.New(result.DateTime{
-			Date:      time.Date(year, 12, 31, 23, 59, 59, 999000000, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 6: // Month precision (YYYY-MM)
-		// End of month
-		lastDay := time.Date(year, month+1, 0, 0, 0, 0, 0, dateTime.Location()).Day()
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, lastDay, 23, 59, 59, 999000000, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 8: // Day precision (YYYY-MM-DD)
-		// End of day
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, 23, 59, 59, 999000000, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 10: // Hour precision (YYYY-MM-DDThh)
-		// End of hour
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, hour, 59, 59, 999000000, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 12: // Minute precision (YYYY-MM-DDThh:mm)
-		// End of minute
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, hour, minute, 59, 999000000, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 14: // Second precision (YYYY-MM-DDThh:mm:ss)
-		// End of second
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, hour, minute, second, 999000000, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 17: // Millisecond precision (YYYY-MM-DDThh:mm:ss.fff)
-		// For millisecond precision (17), preserve the original hour but maximize minutes/seconds/milliseconds
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, hour, 59, 59, 999000000, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	default:
-		return result.Value{}, fmt.Errorf("unsupported precision %d for DateTime high boundary", prec)
-	}
-}
-
-// HighBoundary(input Time, precision Integer) Time
-// https://cql.hl7.org/09-b-cqlreference.html#highboundary
-func evalHighBoundaryTime(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	timeValue, err := result.ToDateTime(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	prec, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	t := timeValue.Date
-	hour, minute, _ := t.Clock()
-	_, _, day := t.Date()
-
-	switch prec {
-	case 2: // Hour precision (hh)
-		return result.New(result.Time{
-			Date:      time.Date(0, 1, day, hour, 59, 59, 999000000, t.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 4: // Minute precision (hh:mm)
-		return result.New(result.Time{
-			Date:      time.Date(0, 1, day, hour, minute, 59, 999000000, t.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 6: // Second precision (hh:mm:ss)
-		return result.New(result.Time{
-			Date:      time.Date(0, 1, day, hour, minute, 59, 999000000, t.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 9: // Millisecond precision (hh:mm:ss.fff)
-		// For millisecond precision, preserve hour and minute but set seconds to maximum (59) with 999ms
-		return result.New(result.Time{
-			Date:      time.Date(0, 1, day, hour, minute, 59, 999000000, t.Location()),
-			Precision: model.MILLISECOND,
-		})
-	default:
-		return result.Value{}, fmt.Errorf("unsupported precision %d for Time high boundary", prec)
-	}
-}
-
-// LowBoundary(input Decimal, precision Integer) Decimal
-// https://cql.hl7.org/09-b-cqlreference.html#lowboundary
-func evalLowBoundaryDecimal(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	decValue, err := result.ToFloat64(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	precValue, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	// Format to ensure we have enough decimal places (at least 8)
-	strValue := fmt.Sprintf("%.8f", decValue)
-	parts := strings.Split(strValue, ".")
-
-	// Set trailing digits to 0s after the precision point
-	if precValue > 0 {
-		numToKeep := int(precValue)
-		if numToKeep <= len(parts[1]) {
-			// Replace all digits after the precision with 0s
-			parts[1] = parts[1][:numToKeep] + strings.Repeat("0", len(parts[1])-numToKeep)
-		} else {
-			// Pad with 0s if needed
-			parts[1] = parts[1] + strings.Repeat("0", numToKeep-len(parts[1]))
-		}
-	}
-
-	resultVal, err := strconv.ParseFloat(parts[0]+"."+parts[1], 64)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	return result.New(resultVal)
-}
-
-// LowBoundary(input Date, precision Integer) Date
-// https://cql.hl7.org/09-b-cqlreference.html#lowboundary
-func evalLowBoundaryDate(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	dt, err := result.ToDateTime(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	prec, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	dateTime := dt.Date
-	year, month, _ := dateTime.Date()
-
-	switch prec {
-	case 4: // Year precision
-		// Start of year
-		return result.New(result.Date{
-			Date:      time.Date(year, 1, 1, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.YEAR,
-		})
-	case 6: // Month precision (YYYY-MM)
-		// Start of month
-		return result.New(result.Date{
-			Date:      time.Date(year, month, 1, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.MONTH,
-		})
-	case 8: // Day precision (YYYY-MM-DD)
-		// Keep the day as is - lowest value for a specific day is that day at the day precision
-		return result.New(result.Date{
-			Date:      dateTime,
-			Precision: model.DAY,
-		})
-	default:
-		return result.Value{}, fmt.Errorf("unsupported precision %d for Date low boundary", prec)
-	}
-}
-
-// LowBoundary(input DateTime, precision Integer) DateTime
-// https://cql.hl7.org/09-b-cqlreference.html#lowboundary
-func evalLowBoundaryDateTime(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	dt, err := result.ToDateTime(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	prec, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	dateTime := dt.Date
-	year, month, day := dateTime.Date()
-	hour, minute, second := dateTime.Clock()
-
-	switch prec {
-	case 4: // Year precision
-		// Start of year
-		return result.New(result.DateTime{
-			Date:      time.Date(year, 1, 1, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 6: // Month precision (YYYY-MM)
-		// Start of month
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, 1, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 8: // Day precision (YYYY-MM-DD)
-		// Start of day
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, 0, 0, 0, 0, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 10: // Hour precision (YYYY-MM-DDThh)
-		// Start of hour
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, hour, 0, 0, 0, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 12: // Minute precision (YYYY-MM-DDThh:mm)
-		// Start of minute
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, hour, minute, 0, 0, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 14: // Second precision (YYYY-MM-DDThh:mm:ss)
-		// Start of second
-		return result.New(result.DateTime{
-			Date:      time.Date(year, month, day, hour, minute, second, 0, dateTime.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 17: // Millisecond precision (YYYY-MM-DDThh:mm:ss.fff)
-		// Keep milliseconds as is
-		return result.New(result.DateTime{
-			Date:      dateTime,
-			Precision: model.MILLISECOND,
-		})
-	default:
-		return result.Value{}, fmt.Errorf("unsupported precision %d for DateTime low boundary", prec)
-	}
-}
-
-// LowBoundary(input Time, precision Integer) Time
-// https://cql.hl7.org/09-b-cqlreference.html#lowboundary
-func evalLowBoundaryTime(_ model.IBinaryExpression, input, precision result.Value) (result.Value, error) {
-	if result.IsNull(input) || result.IsNull(precision) {
-		return result.New(nil)
-	}
-	timeValue, err := result.ToDateTime(input)
-	if err != nil {
-		return result.Value{}, err
-	}
-	prec, err := result.ToInt32(precision)
-	if err != nil {
-		return result.Value{}, err
-	}
-
-	t := timeValue.Date
-	hour, minute, second := t.Clock()
-	_, _, day := t.Date()
-
-	switch prec {
-	case 2: // Hour precision (hh)
-		return result.New(result.Time{
-			Date:      time.Date(0, 1, day, hour, 0, 0, 0, t.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 4: // Minute precision (hh:mm)
-		return result.New(result.Time{
-			Date:      time.Date(0, 1, day, hour, minute, 0, 0, t.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 6: // Second precision (hh:mm:ss)
-		return result.New(result.Time{
-			Date:      time.Date(0, 1, day, hour, minute, second, 0, t.Location()),
-			Precision: model.MILLISECOND,
-		})
-	case 9: // Millisecond precision (hh:mm:ss.fff)
-		return result.New(result.Time{
-			Date:      t,
-			Precision: model.MILLISECOND,
-		})
-	default:
-		return result.Value{}, fmt.Errorf("unsupported precision %d for Time low boundary", prec)
-	}
-}
-
 func minValue(t types.IType, evaluationTimestamp *time.Time) (result.Value, error) {
 	switch t {
 	case types.Integer:

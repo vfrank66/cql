@@ -1315,7 +1315,7 @@ func (i *interpreter) binaryOverloads(m model.IBinaryExpression) ([]convert.Over
 			},
 			{
 				Operands: []types.IType{types.Date, types.Integer},
-				Result:   evalHighBoundaryDate,
+				Result:   evalHighBoundaryDateTime,
 			},
 			{
 				Operands: []types.IType{types.DateTime, types.Integer},
@@ -1323,7 +1323,7 @@ func (i *interpreter) binaryOverloads(m model.IBinaryExpression) ([]convert.Over
 			},
 			{
 				Operands: []types.IType{types.Time, types.Integer},
-				Result:   evalHighBoundaryTime,
+				Result:   evalHighBoundaryDateTime,
 			},
 		}, nil
 	case *model.LowBoundary:
@@ -1334,7 +1334,7 @@ func (i *interpreter) binaryOverloads(m model.IBinaryExpression) ([]convert.Over
 			},
 			{
 				Operands: []types.IType{types.Date, types.Integer},
-				Result:   evalLowBoundaryDate,
+				Result:   evalLowBoundaryDateTime,
 			},
 			{
 				Operands: []types.IType{types.DateTime, types.Integer},
@@ -1342,7 +1342,7 @@ func (i *interpreter) binaryOverloads(m model.IBinaryExpression) ([]convert.Over
 			},
 			{
 				Operands: []types.IType{types.Time, types.Integer},
-				Result:   evalLowBoundaryTime,
+				Result:   evalLowBoundaryDateTime,
 			},
 		}, nil
 	default:

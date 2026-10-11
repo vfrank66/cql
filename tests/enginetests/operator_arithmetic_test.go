@@ -685,8 +685,370 @@ func TestPrecision(t *testing.T) {
 			wantResult: newOrFatal(t, 17),
 		},
 		{
+			name:       "Decimal literal keeps trailing zeros",
+			cql:        "Precision(1.58700)",
+			wantResult: newOrFatal(t, 5),
+		},
+		{
+			name:       "Decimal expression drops trailing zeros",
+			cql:        "Precision(0.000000 + 0.1)",
+			wantResult: newOrFatal(t, 1),
+		},
+		{
+			name:       "Decimal expression rounded to 8 digits",
+			cql:        "Precision(1.0 / 3.0)",
+			wantResult: newOrFatal(t, 8),
+		},
+		{
+			name:       "Null Decimal",
+			cql:        "Precision(null as Decimal)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
 			name:       "Null",
 			cql:        "Precision(null as Date)",
+			wantResult: newOrFatal(t, nil),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newFHIRParser(t)
+			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
+			if err != nil {
+				t.Fatalf("Parse returned unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tc.wantModel, getTESTRESULTModel(t, parsedLibs)); tc.wantModel != nil && diff != "" {
+				t.Errorf("Parse diff (-want +got):\n%s", diff)
+			}
+
+			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
+			if err != nil {
+				t.Fatalf("Eval returned unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.wantResult, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
+				t.Errorf("Eval diff (-want +got)\n%v", diff)
+			}
+		})
+	}
+}
+
+func TestHighBoundary(t *testing.T) {
+	tests := []struct {
+		name       string
+		cql        string
+		wantModel  model.IExpression
+		wantResult result.Value
+	}{
+		{
+			name: "Decimal",
+			cql:  "HighBoundary(1.587, 8)",
+			wantModel: &model.HighBoundary{
+				BinaryExpression: &model.BinaryExpression{
+					Operands: []model.IExpression{
+						model.NewLiteral("1.587", types.Decimal),
+						model.NewLiteral("8", types.Integer),
+					},
+					Expression: model.ResultType(types.Decimal),
+				},
+			},
+			wantResult: newOrFatal(t, 1.58799999),
+		},
+		{
+			name:       "Decimal precision 6",
+			cql:        "HighBoundary(1.587, 6)",
+			wantResult: newOrFatal(t, 1.587999),
+		},
+		{
+			name:       "Decimal precision below input precision",
+			cql:        "HighBoundary(1.587, 2)",
+			wantResult: newOrFatal(t, 1.59),
+		},
+		{
+			name:       "Decimal precision 0",
+			cql:        "HighBoundary(1.587, 0)",
+			wantResult: newOrFatal(t, 2.0),
+		},
+		{
+			name:       "Decimal literal trailing zero",
+			cql:        "HighBoundary(1.5870, 8)",
+			wantResult: newOrFatal(t, 1.58709999),
+		},
+		{
+			name:       "Negative Decimal",
+			cql:        "HighBoundary(-1.587, 8)",
+			wantResult: newOrFatal(t, -1.587),
+		},
+		{
+			name:       "Negative Decimal precision below input precision",
+			cql:        "HighBoundary(-1.587, 2)",
+			wantResult: newOrFatal(t, -1.58),
+		},
+		{
+			name:       "Negative Decimal precision 0",
+			cql:        "HighBoundary(-1.587, 0)",
+			wantResult: newOrFatal(t, -1.0),
+		},
+		{
+			name:       "Integer",
+			cql:        "HighBoundary(2, 1)",
+			wantResult: newOrFatal(t, 2.9),
+		},
+		{
+			name:       "Decimal null precision",
+			cql:        "HighBoundary(1.58888, null)",
+			wantResult: newOrFatal(t, 1.58888999),
+		},
+		{
+			name:       "Decimal negative precision",
+			cql:        "HighBoundary(1.587, -1)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Decimal precision above max",
+			cql:        "HighBoundary(1.587, 9)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Null Decimal",
+			cql:        "HighBoundary(null as Decimal, 8)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Date month",
+			cql:        "HighBoundary(@2014, 6)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.December, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MONTH}),
+		},
+		{
+			name:       "Date day",
+			cql:        "HighBoundary(@2014-02, 8)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.February, 28, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+		},
+		{
+			name:       "Date day leap year",
+			cql:        "HighBoundary(@2016-02, 8)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2016, time.February, 29, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+		},
+		{
+			name:       "Date precision between year and month",
+			cql:        "HighBoundary(@2014, 5)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.January, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.YEAR}),
+		},
+		{
+			name:       "Date precision coarser than input",
+			cql:        "HighBoundary(@2014-03-15, 4)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.January, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.YEAR}),
+		},
+		{
+			name:       "Date null precision",
+			cql:        "HighBoundary(@2014, null)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.December, 31, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+		},
+		{
+			name:       "Date precision above max",
+			cql:        "HighBoundary(@2014, 9)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Date precision below year",
+			cql:        "HighBoundary(@2014, 3)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "DateTime millisecond",
+			cql:        "HighBoundary(@2014-01-01T08, 17)",
+			wantResult: newOrFatal(t, result.DateTime{Date: time.Date(2014, time.January, 1, 8, 59, 59, 999000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "DateTime keeps known minute",
+			cql:        "HighBoundary(@2014-01-01T08:30, 17)",
+			wantResult: newOrFatal(t, result.DateTime{Date: time.Date(2014, time.January, 1, 8, 30, 59, 999000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "DateTime from year",
+			cql:        "HighBoundary(DateTime(2014), 17)",
+			wantResult: newOrFatal(t, result.DateTime{Date: time.Date(2014, time.December, 31, 23, 59, 59, 999000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "DateTime precision between minute and second",
+			cql:        "HighBoundary(@2014-01-01T08, 13)",
+			wantResult: newOrFatal(t, result.DateTime{Date: time.Date(2014, time.January, 1, 8, 59, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MINUTE}),
+		},
+		{
+			name:       "DateTime null precision",
+			cql:        "HighBoundary(@2014-01-01T08, null)",
+			wantResult: newOrFatal(t, result.DateTime{Date: time.Date(2014, time.January, 1, 8, 59, 59, 999000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "DateTime precision above max",
+			cql:        "HighBoundary(@2014-01-01T08, 18)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Time millisecond",
+			cql:        "HighBoundary(@T10:30, 9)",
+			wantResult: newOrFatal(t, result.Time{Date: time.Date(0, time.January, 1, 10, 30, 59, 999000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "Time precision between minute and second",
+			cql:        "HighBoundary(@T10, 5)",
+			wantResult: newOrFatal(t, result.Time{Date: time.Date(0, time.January, 1, 10, 59, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MINUTE}),
+		},
+		{
+			name:       "Time null precision",
+			cql:        "HighBoundary(@T10:30, null)",
+			wantResult: newOrFatal(t, result.Time{Date: time.Date(0, time.January, 1, 10, 30, 59, 999000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "Time precision above max",
+			cql:        "HighBoundary(@T10:30, 10)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Time negative precision",
+			cql:        "HighBoundary(@T10:30, -1)",
+			wantResult: newOrFatal(t, nil),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newFHIRParser(t)
+			parsedLibs, err := p.Libraries(context.Background(), wrapInLib(t, tc.cql), parser.Config{})
+			if err != nil {
+				t.Fatalf("Parse returned unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tc.wantModel, getTESTRESULTModel(t, parsedLibs)); tc.wantModel != nil && diff != "" {
+				t.Errorf("Parse diff (-want +got):\n%s", diff)
+			}
+
+			results, err := interpreter.Eval(context.Background(), parsedLibs, defaultInterpreterConfig(t, p))
+			if err != nil {
+				t.Fatalf("Eval returned unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.wantResult, getTESTRESULT(t, results), protocmp.Transform()); diff != "" {
+				t.Errorf("Eval diff (-want +got)\n%v", diff)
+			}
+		})
+	}
+}
+
+func TestLowBoundary(t *testing.T) {
+	tests := []struct {
+		name       string
+		cql        string
+		wantModel  model.IExpression
+		wantResult result.Value
+	}{
+		{
+			name: "Decimal",
+			cql:  "LowBoundary(1.587, 8)",
+			wantModel: &model.LowBoundary{
+				BinaryExpression: &model.BinaryExpression{
+					Operands: []model.IExpression{
+						model.NewLiteral("1.587", types.Decimal),
+						model.NewLiteral("8", types.Integer),
+					},
+					Expression: model.ResultType(types.Decimal),
+				},
+			},
+			wantResult: newOrFatal(t, 1.587),
+		},
+		{
+			name:       "Decimal precision below input precision",
+			cql:        "LowBoundary(1.587, 2)",
+			wantResult: newOrFatal(t, 1.58),
+		},
+		{
+			name:       "Decimal precision 0",
+			cql:        "LowBoundary(1.587, 0)",
+			wantResult: newOrFatal(t, 1.0),
+		},
+		{
+			name:       "Negative Decimal",
+			cql:        "LowBoundary(-1.587, 8)",
+			wantResult: newOrFatal(t, -1.58799999),
+		},
+		{
+			name:       "Negative Decimal precision below input precision",
+			cql:        "LowBoundary(-1.587, 2)",
+			wantResult: newOrFatal(t, -1.59),
+		},
+		{
+			name:       "Negative Decimal precision 0",
+			cql:        "LowBoundary(-1.587, 0)",
+			wantResult: newOrFatal(t, -2.0),
+		},
+		{
+			name:       "Decimal null precision",
+			cql:        "LowBoundary(1.58888, null)",
+			wantResult: newOrFatal(t, 1.58888),
+		},
+		{
+			name:       "Decimal negative precision",
+			cql:        "LowBoundary(1.587, -1)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Decimal precision above max",
+			cql:        "LowBoundary(1.587, 9)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Null Decimal",
+			cql:        "LowBoundary(null as Decimal, 8)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Date month",
+			cql:        "LowBoundary(@2014, 6)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.January, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MONTH}),
+		},
+		{
+			name:       "Date precision between month and day",
+			cql:        "LowBoundary(@2014, 7)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.January, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MONTH}),
+		},
+		{
+			name:       "Date precision coarser than input",
+			cql:        "LowBoundary(@2014-03-15, 6)",
+			wantResult: newOrFatal(t, result.Date{Date: time.Date(2014, time.March, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MONTH}),
+		},
+		{
+			name:       "Date precision above max",
+			cql:        "LowBoundary(@2014, 9)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "DateTime millisecond",
+			cql:        "LowBoundary(@2014-01-01T08, 17)",
+			wantResult: newOrFatal(t, result.DateTime{Date: time.Date(2014, time.January, 1, 8, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "DateTime precision between hour and minute",
+			cql:        "LowBoundary(@2014-01-01T08:30, 11)",
+			wantResult: newOrFatal(t, result.DateTime{Date: time.Date(2014, time.January, 1, 8, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.HOUR}),
+		},
+		{
+			name:       "DateTime precision above max",
+			cql:        "LowBoundary(@2014-01-01T08, 18)",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name:       "Time millisecond",
+			cql:        "LowBoundary(@T10:30, 9)",
+			wantResult: newOrFatal(t, result.Time{Date: time.Date(0, time.January, 1, 10, 30, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "Time null precision",
+			cql:        "LowBoundary(@T10:30, null)",
+			wantResult: newOrFatal(t, result.Time{Date: time.Date(0, time.January, 1, 10, 30, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+		},
+		{
+			name:       "Time precision below hour",
+			cql:        "LowBoundary(@T10:30, 1)",
 			wantResult: newOrFatal(t, nil),
 		},
 	}
