@@ -329,6 +329,149 @@ func TestIntersectInterval(t *testing.T) {
 				StaticType:    &types.Interval{PointType: types.Integer},
 			}),
 		},
+		// Open bounds
+		{
+			name: "Long intervals with open low bound",
+			cql:  "Interval(3L, 7L] intersect Interval[1L, 10L]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int64(4)),
+				High:          newOrFatal(t, int64(7)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Long},
+			}),
+		},
+		{
+			name: "Long intervals with open high bound",
+			cql:  "Interval[1L, 7L) intersect Interval[1L, 10L]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int64(1)),
+				High:          newOrFatal(t, int64(6)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Long},
+			}),
+		},
+		{
+			name: "Identical open Long intervals",
+			cql:  "Interval(1L, 5L) intersect Interval(1L, 5L)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, int64(2)),
+				High:          newOrFatal(t, int64(4)),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Long},
+			}),
+		},
+		{
+			name:       "Long point in intersection with open low bound",
+			cql:        "4L in (Interval(3L, 7L] intersect Interval[1L, 10L])",
+			wantResult: newOrFatal(t, true),
+		},
+		{
+			name: "Decimal intervals with open bounds",
+			cql:  "Interval(1.5, 5.5) intersect Interval(3.0, 7.0)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, 3.0),
+				High:          newOrFatal(t, 5.5),
+				LowInclusive:  false,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Decimal},
+			}),
+		},
+		{
+			name: "Decimal intervals with tied high bound",
+			cql:  "Interval[1.5, 5.5) intersect Interval[3.0, 5.5]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, 3.0),
+				High:          newOrFatal(t, 5.5),
+				LowInclusive:  true,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Decimal},
+			}),
+		},
+		{
+			name: "Identical open Decimal intervals",
+			cql:  "Interval(1.0, 5.0) intersect Interval(1.0, 5.0)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, 1.0),
+				High:          newOrFatal(t, 5.0),
+				LowInclusive:  false,
+				HighInclusive: false,
+				StaticType:    &types.Interval{PointType: types.Decimal},
+			}),
+		},
+		{
+			name:       "Decimal intervals touching at an open bound",
+			cql:        "Interval[1.0, 3.0) intersect Interval[3.0, 5.0]",
+			wantResult: newOrFatal(t, nil),
+		},
+		{
+			name: "Quantity intervals with open low bound",
+			cql:  "Interval[1.0 'cm', 5.0 'cm'] intersect Interval(3.0 'cm', 7.0 'cm']",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Quantity{Value: 3.0, Unit: "cm"}),
+				High:          newOrFatal(t, result.Quantity{Value: 5.0, Unit: "cm"}),
+				LowInclusive:  false,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Quantity},
+			}),
+		},
+		{
+			name: "Date intervals with open low bound",
+			cql:  "Interval(@2020-01-01, @2020-06-01] intersect Interval[@2020-01-02, @2020-09-01]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Date{Date: time.Date(2020, time.January, 2, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				High:          newOrFatal(t, result.Date{Date: time.Date(2020, time.June, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Date},
+			}),
+		},
+		{
+			name: "Date intervals with open high bound",
+			cql:  "Interval[@2020-01-01, @2020-06-01) intersect Interval[@2020-03-01, @2020-05-31]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Date{Date: time.Date(2020, time.March, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				High:          newOrFatal(t, result.Date{Date: time.Date(2020, time.May, 31, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Date},
+			}),
+		},
+		{
+			name: "Date intervals with open high bound, operands swapped",
+			cql:  "Interval[@2020-03-01, @2020-05-31] intersect Interval[@2020-01-01, @2020-06-01)",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Date{Date: time.Date(2020, time.March, 1, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				High:          newOrFatal(t, result.Date{Date: time.Date(2020, time.May, 31, 0, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.DAY}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Date},
+			}),
+		},
+		{
+			name: "DateTime intervals with open low bound",
+			cql:  "Interval(@2020-01-01T10:00:00.000, @2020-01-01T15:00:00.000] intersect Interval[@2020-01-01T10:00:00.001, @2020-01-01T18:00:00.000]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 10, 0, 0, 1000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+				High:          newOrFatal(t, result.DateTime{Date: time.Date(2020, time.January, 1, 15, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.DateTime},
+			}),
+		},
+		{
+			name: "Time intervals with open low bound",
+			cql:  "Interval(@T10:00:00.000, @T15:00:00.000] intersect Interval[@T10:00:00.001, @T18:00:00.000]",
+			wantResult: newOrFatal(t, result.Interval{
+				Low:           newOrFatal(t, result.Time{Date: time.Date(0, time.January, 1, 10, 0, 0, 1000000, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+				High:          newOrFatal(t, result.Time{Date: time.Date(0, time.January, 1, 15, 0, 0, 0, defaultEvalTimestamp.Location()), Precision: model.MILLISECOND}),
+				LowInclusive:  true,
+				HighInclusive: true,
+				StaticType:    &types.Interval{PointType: types.Time},
+			}),
+		},
 	}
 
 	for _, tc := range tests {

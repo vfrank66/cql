@@ -720,24 +720,9 @@ func (i *interpreter) calculateNumeralIntersectionInt64(lStart, lEnd, rStart, rE
 		return result.New(nil)
 	}
 
-	// Calculate inclusivity for intersection bounds
-	// Start is inclusive if it matches an inclusive bound from either interval
+	// Effective bounds from startAndEnd() are closed, so the result is closed.
 	startInclusive := true
-	if compareNumeral(intersectionStart, lStart) == leftEqualRight {
-		startInclusive = lInterval.LowInclusive
-	}
-	if compareNumeral(intersectionStart, rStart) == leftEqualRight {
-		startInclusive = startInclusive && rInterval.LowInclusive
-	}
-
-	// End is inclusive if it matches an inclusive bound from either interval
 	endInclusive := true
-	if compareNumeral(intersectionEnd, lEnd) == leftEqualRight {
-		endInclusive = lInterval.HighInclusive
-	}
-	if compareNumeral(intersectionEnd, rEnd) == leftEqualRight {
-		endInclusive = endInclusive && rInterval.HighInclusive
-	}
 
 	// Create result values
 	startVal, err := result.New(intersectionStart)
@@ -761,29 +746,15 @@ func (i *interpreter) calculateNumeralIntersectionInt64(lStart, lEnd, rStart, rE
 	return result.New(intersectionInterval)
 }
 
-// calculateNumeralIntersectionFloat64 calculates the intersection of two float64 intervals
-func (i *interpreter) calculateNumeralIntersectionFloat64(lStart, lEnd, rStart, rEnd float64, lInterval, rInterval result.Interval) (result.Value, error) {
-	// Calculate intersection bounds
-	intersectionStart := maxFloat64(lStart, rStart)
-	intersectionEnd := minFloat64(lEnd, rEnd)
-
-	// Check if there's no overlap
-	if compareNumeral(intersectionStart, intersectionEnd) == leftAfterRight {
+// calculateNumeralIntersectionFloat64 calculates the intersection of two float64 intervals.
+// The bounds are the intervals' own bounds, not start()/end(), so open bounds stay open.
+func (i *interpreter) calculateNumeralIntersectionFloat64(lStart, lEnd, rStart, rEnd float64, lLowIncl, lHighIncl, rLowIncl, rHighIncl bool, staticType *types.Interval) (result.Value, error) {
+	intersectionStart, startInclusive := intersectLowBound(lStart, lLowIncl, rStart, rLowIncl)
+	intersectionEnd, endInclusive := intersectHighBound(lEnd, lHighIncl, rEnd, rHighIncl)
+	if isEmptyFloat64Interval(intersectionStart, startInclusive, intersectionEnd, endInclusive) {
 		return result.New(nil)
 	}
 
-	// Create intersection interval with appropriate inclusivity
-	startInclusive := (compareNumeral(intersectionStart, lStart) == leftEqualRight && lInterval.LowInclusive) ||
-		(compareNumeral(intersectionStart, rStart) == leftEqualRight && rInterval.LowInclusive) ||
-		(compareNumeral(intersectionStart, lStart) == leftAfterRight && compareNumeral(intersectionStart, lEnd) == leftBeforeRight) ||
-		(compareNumeral(intersectionStart, rStart) == leftAfterRight && compareNumeral(intersectionStart, rEnd) == leftBeforeRight)
-
-	endInclusive := (compareNumeral(intersectionEnd, lEnd) == leftEqualRight && lInterval.HighInclusive) ||
-		(compareNumeral(intersectionEnd, rEnd) == leftEqualRight && rInterval.HighInclusive) ||
-		(compareNumeral(intersectionEnd, lStart) == leftAfterRight && compareNumeral(intersectionEnd, lEnd) == leftBeforeRight) ||
-		(compareNumeral(intersectionEnd, rStart) == leftAfterRight && compareNumeral(intersectionEnd, rEnd) == leftBeforeRight)
-
-	// Create result values
 	startVal, err := result.New(intersectionStart)
 	if err != nil {
 		return result.Value{}, err
@@ -792,50 +763,24 @@ func (i *interpreter) calculateNumeralIntersectionFloat64(lStart, lEnd, rStart, 
 	if err != nil {
 		return result.Value{}, err
 	}
-
-	// Create the intersection interval
-	intersectionInterval := result.Interval{
+	return result.New(result.Interval{
 		Low:           startVal,
 		High:          endVal,
 		LowInclusive:  startInclusive,
 		HighInclusive: endInclusive,
-		StaticType:    lInterval.StaticType,
-	}
-
-	return result.New(intersectionInterval)
+		StaticType:    staticType,
+	})
 }
 
-// calculateNumeralIntersectionQuantity calculates the intersection of two Quantity intervals
-func (i *interpreter) calculateNumeralIntersectionQuantity(lStart, lEnd, rStart, rEnd result.Quantity, lInterval, rInterval result.Interval) (result.Value, error) {
-	// Calculate intersection bounds
-	intersectionStart := maxFloat64(lStart.Value, rStart.Value)
-	intersectionEnd := minFloat64(lEnd.Value, rEnd.Value)
-
-	// Check if there's no overlap
-	if compareNumeral(intersectionStart, intersectionEnd) == leftAfterRight {
+// calculateNumeralIntersectionQuantity calculates the intersection of two Quantity intervals.
+// The bounds are the intervals' own bounds, not start()/end(), so open bounds stay open.
+func (i *interpreter) calculateNumeralIntersectionQuantity(lStart, lEnd, rStart, rEnd result.Quantity, lLowIncl, lHighIncl, rLowIncl, rHighIncl bool, staticType *types.Interval) (result.Value, error) {
+	intersectionStart, startInclusive := intersectLowBound(lStart.Value, lLowIncl, rStart.Value, rLowIncl)
+	intersectionEnd, endInclusive := intersectHighBound(lEnd.Value, lHighIncl, rEnd.Value, rHighIncl)
+	if isEmptyFloat64Interval(intersectionStart, startInclusive, intersectionEnd, endInclusive) {
 		return result.New(nil)
 	}
 
-	// Calculate inclusivity for intersection bounds
-	// Start is inclusive if it matches an inclusive bound from either interval
-	startInclusive := true
-	if compareNumeral(intersectionStart, lStart.Value) == leftEqualRight {
-		startInclusive = lInterval.LowInclusive
-	}
-	if compareNumeral(intersectionStart, rStart.Value) == leftEqualRight {
-		startInclusive = startInclusive && rInterval.LowInclusive
-	}
-
-	// End is inclusive if it matches an inclusive bound from either interval
-	endInclusive := true
-	if compareNumeral(intersectionEnd, lEnd.Value) == leftEqualRight {
-		endInclusive = lInterval.HighInclusive
-	}
-	if compareNumeral(intersectionEnd, rEnd.Value) == leftEqualRight {
-		endInclusive = endInclusive && rInterval.HighInclusive
-	}
-
-	// Create result values with Quantity type
 	startVal, err := result.New(result.Quantity{Value: intersectionStart, Unit: lStart.Unit})
 	if err != nil {
 		return result.Value{}, err
@@ -844,17 +789,48 @@ func (i *interpreter) calculateNumeralIntersectionQuantity(lStart, lEnd, rStart,
 	if err != nil {
 		return result.Value{}, err
 	}
-
-	// Create the intersection interval
-	intersectionInterval := result.Interval{
+	return result.New(result.Interval{
 		Low:           startVal,
 		High:          endVal,
 		LowInclusive:  startInclusive,
 		HighInclusive: endInclusive,
-		StaticType:    lInterval.StaticType,
-	}
+		StaticType:    staticType,
+	})
+}
 
-	return result.New(intersectionInterval)
+// intersectLowBound returns the greater low bound; on a tie it is closed only if both are.
+func intersectLowBound(l float64, lIncl bool, r float64, rIncl bool) (float64, bool) {
+	switch {
+	case l > r:
+		return l, lIncl
+	case r > l:
+		return r, rIncl
+	}
+	return l, lIncl && rIncl
+}
+
+// intersectHighBound returns the lesser high bound; on a tie it is closed only if both are.
+func intersectHighBound(l float64, lIncl bool, r float64, rIncl bool) (float64, bool) {
+	switch {
+	case l < r:
+		return l, lIncl
+	case r < l:
+		return r, rIncl
+	}
+	return l, lIncl && rIncl
+}
+
+func isEmptyFloat64Interval(low float64, lowIncl bool, high float64, highIncl bool) bool {
+	return low > high || (low == high && !(lowIncl && highIncl))
+}
+
+// ownOrEffectiveBound returns an interval's own bound and inclusivity, or the closed effective
+// bound from start()/end() when its own bound is null.
+func ownOrEffectiveBound(bound result.Value, inclusive bool, effective result.Value) (result.Value, bool) {
+	if result.IsNull(bound) {
+		return effective, true
+	}
+	return bound, inclusive
 }
 
 // evalIntersectIntervalDateTime handles intersection for date/time interval types
@@ -927,16 +903,9 @@ func (i *interpreter) evalIntersectIntervalDate(lStart, lEnd, rStart, rEnd resul
 		return result.New(nil)
 	}
 
-	// Determine inclusivity for intersection bounds
-	startInclusive := (intersectionStartDT.Date.Equal(lStartDT.Date) && lInterval.LowInclusive) ||
-		(intersectionStartDT.Date.Equal(rStartDT.Date) && lInterval.LowInclusive) ||
-		(intersectionStartDT.Date.After(lStartDT.Date) && intersectionStartDT.Date.Before(lEndDT.Date)) ||
-		(intersectionStartDT.Date.After(rStartDT.Date) && intersectionStartDT.Date.Before(rEndDT.Date))
-
-	endInclusive := (intersectionEndDT.Date.Equal(lEndDT.Date) && lInterval.HighInclusive) ||
-		(intersectionEndDT.Date.Equal(rEndDT.Date) && lInterval.HighInclusive) ||
-		(intersectionEndDT.Date.After(lStartDT.Date) && intersectionEndDT.Date.Before(lEndDT.Date)) ||
-		(intersectionEndDT.Date.After(rStartDT.Date) && intersectionEndDT.Date.Before(rEndDT.Date))
+	// Effective bounds from startAndEnd() are closed, so the result is closed.
+	startInclusive := true
+	endInclusive := true
 
 	// Create the intersection interval with Date values
 	intersectionInterval := result.Interval{
@@ -981,16 +950,9 @@ func (i *interpreter) evalIntersectIntervalDateTimeType(lStart, lEnd, rStart, rE
 		return result.New(nil)
 	}
 
-	// Determine inclusivity for intersection bounds
-	startInclusive := (intersectionStart.Date.Equal(lStartDT.Date) && lInterval.LowInclusive) ||
-		(intersectionStart.Date.Equal(rStartDT.Date) && lInterval.LowInclusive) ||
-		(intersectionStart.Date.After(lStartDT.Date) && intersectionStart.Date.Before(lEndDT.Date)) ||
-		(intersectionStart.Date.After(rStartDT.Date) && intersectionStart.Date.Before(rEndDT.Date))
-
-	endInclusive := (intersectionEnd.Date.Equal(lEndDT.Date) && lInterval.HighInclusive) ||
-		(intersectionEnd.Date.Equal(rEndDT.Date) && lInterval.HighInclusive) ||
-		(intersectionEnd.Date.After(lStartDT.Date) && intersectionEnd.Date.Before(lEndDT.Date)) ||
-		(intersectionEnd.Date.After(rStartDT.Date) && intersectionEnd.Date.Before(rEndDT.Date))
+	// Effective bounds from startAndEnd() are closed, so the result is closed.
+	startInclusive := true
+	endInclusive := true
 
 	// Create result values
 	startVal, err := result.New(intersectionStart)
@@ -1051,16 +1013,9 @@ func (i *interpreter) evalIntersectIntervalTime(lStart, lEnd, rStart, rEnd resul
 		return result.New(nil)
 	}
 
-	// Determine inclusivity for intersection bounds
-	startInclusive := (intersectionStartDT.Date.Equal(lStartDT.Date) && lInterval.LowInclusive) ||
-		(intersectionStartDT.Date.Equal(rStartDT.Date) && lInterval.LowInclusive) ||
-		(intersectionStartDT.Date.After(lStartDT.Date) && intersectionStartDT.Date.Before(lEndDT.Date)) ||
-		(intersectionStartDT.Date.After(rStartDT.Date) && intersectionStartDT.Date.Before(rEndDT.Date))
-
-	endInclusive := (intersectionEndDT.Date.Equal(lEndDT.Date) && lInterval.HighInclusive) ||
-		(intersectionEndDT.Date.Equal(rEndDT.Date) && lInterval.HighInclusive) ||
-		(intersectionEndDT.Date.After(lStartDT.Date) && intersectionEndDT.Date.Before(lEndDT.Date)) ||
-		(intersectionEndDT.Date.After(rStartDT.Date) && intersectionEndDT.Date.Before(rEndDT.Date))
+	// Effective bounds from startAndEnd() are closed, so the result is closed.
+	startInclusive := true
+	endInclusive := true
 
 	// Create the intersection interval with Time values
 	intersectionInterval := result.Interval{
@@ -1219,17 +1174,22 @@ func (i *interpreter) evalIntersectIntervalDecimal(m model.IBinaryExpression, lO
 	lInterval, _ := result.ToInterval(lObj)
 	rInterval, _ := result.ToInterval(rObj)
 
+	lLow, lLowIncl := ownOrEffectiveBound(lInterval.Low, lInterval.LowInclusive, lStart)
+	lHigh, lHighIncl := ownOrEffectiveBound(lInterval.High, lInterval.HighInclusive, lEnd)
+	rLow, rLowIncl := ownOrEffectiveBound(rInterval.Low, rInterval.LowInclusive, rStart)
+	rHigh, rHighIncl := ownOrEffectiveBound(rInterval.High, rInterval.HighInclusive, rEnd)
+
 	// Convert to float64 values
-	lStartVal, lEndVal, err := applyToValues(lStart, lEnd, result.ToFloat64)
+	lStartVal, lEndVal, err := applyToValues(lLow, lHigh, result.ToFloat64)
 	if err != nil {
 		return result.Value{}, err
 	}
-	rStartVal, rEndVal, err := applyToValues(rStart, rEnd, result.ToFloat64)
+	rStartVal, rEndVal, err := applyToValues(rLow, rHigh, result.ToFloat64)
 	if err != nil {
 		return result.Value{}, err
 	}
 
-	return i.calculateNumeralIntersectionFloat64(lStartVal, lEndVal, rStartVal, rEndVal, lInterval, rInterval)
+	return i.calculateNumeralIntersectionFloat64(lStartVal, lEndVal, rStartVal, rEndVal, lLowIncl, lHighIncl, rLowIncl, rHighIncl, lInterval.StaticType)
 }
 
 func (i *interpreter) evalIntersectIntervalQuantity(m model.IBinaryExpression, lObj, rObj result.Value) (result.Value, error) {
@@ -1257,12 +1217,17 @@ func (i *interpreter) evalIntersectIntervalQuantity(m model.IBinaryExpression, l
 	lInterval, _ := result.ToInterval(lObj)
 	rInterval, _ := result.ToInterval(rObj)
 
+	lLow, lLowIncl := ownOrEffectiveBound(lInterval.Low, lInterval.LowInclusive, lStart)
+	lHigh, lHighIncl := ownOrEffectiveBound(lInterval.High, lInterval.HighInclusive, lEnd)
+	rLow, rLowIncl := ownOrEffectiveBound(rInterval.Low, rInterval.LowInclusive, rStart)
+	rHigh, rHighIncl := ownOrEffectiveBound(rInterval.High, rInterval.HighInclusive, rEnd)
+
 	// Convert to Quantity values
-	lStartVal, lEndVal, err := applyToValues(lStart, lEnd, result.ToQuantity)
+	lStartVal, lEndVal, err := applyToValues(lLow, lHigh, result.ToQuantity)
 	if err != nil {
 		return result.Value{}, err
 	}
-	rStartVal, rEndVal, err := applyToValues(rStart, rEnd, result.ToQuantity)
+	rStartVal, rEndVal, err := applyToValues(rLow, rHigh, result.ToQuantity)
 	if err != nil {
 		return result.Value{}, err
 	}
@@ -1272,5 +1237,5 @@ func (i *interpreter) evalIntersectIntervalQuantity(m model.IBinaryExpression, l
 		return result.Value{}, fmt.Errorf("intersect operator received Quantities with differing unit values, unit conversion is not currently supported, got: %v, %v", lStartVal.Unit, rStartVal.Unit)
 	}
 
-	return i.calculateNumeralIntersectionQuantity(lStartVal, lEndVal, rStartVal, rEndVal, lInterval, rInterval)
+	return i.calculateNumeralIntersectionQuantity(lStartVal, lEndVal, rStartVal, rEndVal, lLowIncl, lHighIncl, rLowIncl, rHighIncl, lInterval.StaticType)
 }
